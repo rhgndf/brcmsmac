@@ -16271,7 +16271,8 @@ static void wlc_phy_workarounds_nphy_rev7(struct brcms_phy *pi)
 		if (((pi->pubpi.radiorev == 5)
 		     && (CHSPEC_IS40(pi->radio_chanspec) == 1))
 		    || (pi->pubpi.radiorev == 7)
-		    || (pi->pubpi.radiorev == 8)) {
+		    || (pi->pubpi.radiorev == 8)
+		    || (pi->pubpi.radiorev == 9)) {
 
 			rccal_bcap_val =
 			    read_radio_reg(pi, RADIO_2057_RCCAL_BCAP_VAL);
@@ -16308,6 +16309,20 @@ static void wlc_phy_workarounds_nphy_rev7(struct brcms_phy *pi)
 					rccal_tx40_11n_bcap = 0xf;
 					rccal_tx40_11n_scap = 0xf;
 				}
+
+				rccal_ovrd = true;
+			} else if (pi->pubpi.radiorev == 9) {
+				tx_lpf_bw_ofdm_20mhz = 4;
+				tx_lpf_bw_11b = 1;
+
+				rccal_tx20_11n_bcap =
+					min_t(int, rccal_bcap_val + 13, 0x1f);
+				rccal_tx20_11n_scap =
+					min_t(int, rccal_scap_val + 15, 0x1f);
+				rccal_tx40_11n_bcap =
+					max_t(int, rccal_bcap_val - 7, 0);
+				rccal_tx40_11n_scap =
+					max_t(int, rccal_scap_val - 5, 0);
 
 				rccal_ovrd = true;
 			}
@@ -16349,6 +16364,12 @@ static void wlc_phy_workarounds_nphy_rev7(struct brcms_phy *pi)
 		    (rccal_tx40_11n_bcap << 8) |
 		    (rccal_tx40_11n_scap << 3) | tx_lpf_bw_ofdm_40mhz;
 
+		if (pi->pubpi.radiorev == 9) {
+			rx2tx_lpf_rc_lut_tx20_11b |= (0x1 << 13);
+			rx2tx_lpf_rc_lut_tx20_11n |= (0x1 << 13);
+			rx2tx_lpf_rc_lut_tx40_11n |= (0x1 << 13);
+		}
+
 		for (coreNum = 0; coreNum <= 1; coreNum++) {
 			wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_RFSEQ, 1,
 						 0x152 + coreNum * 0x10, 16,
@@ -16374,10 +16395,18 @@ static void wlc_phy_workarounds_nphy_rev7(struct brcms_phy *pi)
 			wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_RFSEQ, 1,
 						 0x159 + coreNum * 0x10, 16,
 						 &rx2tx_lpf_rc_lut_tx40_11n);
+
+			if (pi->pubpi.radiorev == 9)
+				wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_RFSEQ,
+							 1, 0x158 + coreNum * 0x10,
+							 16,
+							 &rx2tx_lpf_rc_lut_tx20_11b);
 		}
 
-		wlc_phy_rfctrl_override_nphy_rev7(pi, (0x1 << 4), 1, 0x3, 0,
-						  NPHY_REV7_RFCTRLOVERRIDE_ID2);
+		if (pi->pubpi.radiorev != 9)
+			wlc_phy_rfctrl_override_nphy_rev7(pi, (0x1 << 4), 1,
+							  0x3, 0,
+							  NPHY_REV7_RFCTRLOVERRIDE_ID2);
 	}
 
 	write_phy_reg(pi, 0x32f, 0x3);
