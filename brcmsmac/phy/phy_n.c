@@ -13304,6 +13304,41 @@ static const struct radio_20xx_regs regs_2057_rev8[] = {
 	{0xFFFF, 0, 0}
 };
 
+static const struct radio_20xx_regs regs_2057_rev9[] = {
+	{0x27, 0x1f, 1},
+	{0x28, 0x0a, 1},
+	{0x29, 0x2f, 1},
+	{0x42, 0x1f, 1},
+	{0x48, 0x3f, 1},
+	{0x5c, 0x41, 1},
+	{0x63, 0x14, 1},
+	{0x64, 0x12, 1},
+	{0x66, 0xff, 1},
+	{0x74, 0xa3, 1},
+	{0x7b, 0x14, 1},
+	{0x7c, 0x14, 1},
+	{0x7d, 0xee, 1},
+	{0x86, 0xc0, 1},
+	{0xc4, 0x10, 1},
+	{0xc9, 0x01, 1},
+	{0xe1, 0x41, 1},
+	{0xe8, 0x14, 1},
+	{0xe9, 0x12, 1},
+	{0xeb, 0xff, 1},
+	{0xf5, 0x0a, 1},
+	{0xf8, 0x09, 1},
+	{0xf9, 0xa3, 1},
+	{0x100, 0x14, 1},
+	{0x101, 0x10, 1},
+	{0x102, 0xee, 1},
+	{0x10b, 0xc0, 1},
+	{0x149, 0x10, 1},
+	{0x14e, 0x01, 1},
+	{0x1b7, 0x05, 1},
+	{0x1c2, 0xa0, 1},
+	{0xFFFF, 0, 0}
+};
+
 static s16 nphy_def_lnagains[] = { -2, 10, 19, 25 };
 
 static s32 nphy_lnagain_est0[] = { -315, 40370 };
@@ -19763,9 +19798,78 @@ static void wlc_phy_radio_init_2057(struct brcms_phy *pi)
 		default:
 			break;
 		}
+	} else if (NREV_IS(pi->pubpi.phy_rev, 16) &&
+		   pi->pubpi.radiorev == 9) {
+		regs_2057_ptr = regs_2057_rev9;
 	}
 
 	wlc_phy_init_radio_regs_allbands(pi, regs_2057_ptr);
+}
+
+static const u16 rcal_2057_rev9_rfctrl_regs[] = {
+	0x7a, 0x7d, 0xf8, 0xfa, 0x7b, 0x7e, 0x7c, 0x7f,
+	0x340, 0x341, 0x344, 0x345
+};
+
+static const u16 rcal_2057_rev9_rfovr_regs[] = {
+	0xe7, 0xec, 0x342, 0x343, 0x346, 0x347
+};
+
+static const u16 rcal_2057_rev9_rfovr_vals[] = {
+	0x7ff, 0x7ff, 0x7ff, 0x7ff, 0x7f, 0x7f
+};
+
+static u16 wlc_phy_radio2057_rcal_rev9(struct brcms_phy *pi)
+{
+	u16 rfctrl[ARRAY_SIZE(rcal_2057_rev9_rfctrl_regs)];
+	u16 rfovr[ARRAY_SIZE(rcal_2057_rev9_rfovr_regs)];
+	u16 iqtest_sel_pu;
+	u16 rcal_reg = 0;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(rfctrl); i++)
+		rfctrl[i] = read_phy_reg(pi, rcal_2057_rev9_rfctrl_regs[i]);
+	for (i = 0; i < ARRAY_SIZE(rfovr); i++)
+		rfovr[i] = read_phy_reg(pi, rcal_2057_rev9_rfovr_regs[i]);
+
+	for (i = 0; i < ARRAY_SIZE(rfctrl); i++)
+		write_phy_reg(pi, rcal_2057_rev9_rfctrl_regs[i], 0);
+	for (i = 0; i < ARRAY_SIZE(rfovr); i++)
+		write_phy_reg(pi, rcal_2057_rev9_rfovr_regs[i],
+			      rcal_2057_rev9_rfovr_vals[i]);
+
+	or_phy_reg(pi, 0x342, 0x2);
+	or_phy_reg(pi, 0x340, 0x2);
+
+	iqtest_sel_pu = read_radio_reg(pi, RADIO_2057_IQTEST_SEL_PU);
+	write_radio_reg(pi, RADIO_2057_IQTEST_SEL_PU, 0x11);
+
+	mod_radio_reg(pi, RADIO_2057_RCAL_CONFIG, 0x1, 0x1);
+	udelay(10);
+	mod_radio_reg(pi, RADIO_2057_RCAL_CONFIG, 0x2, 0x2);
+	udelay(100);
+	mod_radio_reg(pi, RADIO_2057_RCAL_CONFIG, 0x2, 0x0);
+
+	for (i = 0; i < MAX_205x_RCAL_WAITLOOPS; i++) {
+		if (read_radio_reg(pi, RADIO_2057_RCAL_STATUS) & 0x1)
+			break;
+
+		udelay(100);
+	}
+
+	if (!WARN(i == MAX_205x_RCAL_WAITLOOPS, "HW error: radio calib2"))
+		rcal_reg = read_radio_reg(pi, RADIO_2057_RCAL_STATUS) & 0x3e;
+
+	mod_radio_reg(pi, RADIO_2057_RCAL_CONFIG, 0x1, 0x0);
+
+	for (i = 0; i < ARRAY_SIZE(rfovr); i++)
+		write_phy_reg(pi, rcal_2057_rev9_rfovr_regs[i], rfovr[i]);
+	for (i = 0; i < ARRAY_SIZE(rfctrl); i++)
+		write_phy_reg(pi, rcal_2057_rev9_rfctrl_regs[i], rfctrl[i]);
+
+	write_radio_reg(pi, RADIO_2057_IQTEST_SEL_PU, iqtest_sel_pu);
+
+	return rcal_reg;
 }
 
 static u16 wlc_phy_radio205x_rcal(struct brcms_phy *pi)
@@ -19774,6 +19878,8 @@ static u16 wlc_phy_radio205x_rcal(struct brcms_phy *pi)
 	int i;
 
 	if (NREV_GE(pi->pubpi.phy_rev, 7)) {
+		if (pi->pubpi.radiorev == 9)
+			return wlc_phy_radio2057_rcal_rev9(pi);
 
 		if (pi->pubpi.radiorev == 5) {
 
@@ -19955,6 +20061,9 @@ static u16 wlc_phy_radio2057_rccal(struct brcms_phy *pi)
 		return 0;
 
 	write_radio_reg(pi, RADIO_2057_RCCAL_START_R1_Q1_P1, 0x15);
+
+	if (pi->pubpi.radiorev == 9)
+		mod_radio_reg(pi, RADIO_2057v7_RCCAL_MASTER, 0x1, 0x0);
 
 	return rccal_valid;
 }
@@ -20983,6 +21092,9 @@ wlc_phy_chanspec_radio2057_setup(
 					0x8);
 		}
 
+	} else if (pi->pubpi.radiorev == 9) {
+		write_radio_reg(pi, RADIO_2057_LOGEN_PTAT_RESETS, 0x20);
+		write_radio_reg(pi, RADIO_2057_VCOBUF_IDACS, 0x18);
 	}
 
 	if (CHSPEC_IS2G(pi->radio_chanspec)) {
@@ -20992,6 +21104,18 @@ wlc_phy_chanspec_radio2057_setup(
 
 			if (pi->pubpi.radiorev == 5)
 				pad2g_tune_pus = 0x73;
+
+			if (pi->pubpi.radiorev == 9) {
+				uint chan = CHSPEC_CHANNEL(pi->radio_chanspec);
+
+				txmix2g_tune_boost_pu = 0x41;
+				if (chan <= 6)
+					pad2g_tune_pus = 0x43;
+				else if (chan <= 11)
+					pad2g_tune_pus = 0x33;
+				else
+					pad2g_tune_pus = 0x23;
+			}
 
 		} else {
 			if (pi->pubpi.radiorev != 5) {
