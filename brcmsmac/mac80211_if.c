@@ -976,7 +976,10 @@ static int brcms_ops_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	int err = 0;
 
 	if (cmd == SET_KEY) {
-		if (brcms_nohwcrypt || key->cipher != WLAN_CIPHER_SUITE_CCMP)
+		if (brcms_nohwcrypt ||
+		    (key->cipher != WLAN_CIPHER_SUITE_CCMP &&
+		     key->cipher != WLAN_CIPHER_SUITE_WEP40 &&
+		     key->cipher != WLAN_CIPHER_SUITE_WEP104))
 			return -EOPNOTSUPP;
 		/* group keys of several transmitters need more key slots */
 		if (!pairwise && vif->type != NL80211_IFTYPE_STATION &&

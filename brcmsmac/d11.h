@@ -1337,6 +1337,8 @@ struct shm_acparams {
 #define MHF1_IQSWAP_WAR		0x0200
 /* Disable Slow clock request, for corerev < 11 */
 #define	MHF1_FORCEFASTCLK	0x0400
+/* Decrypt unicast frames without a key match with the default keys */
+#define	MHF1_USEDEFKEYS		0x4000
 
 /* Flags in M_HOST_FLAGS2 */
 

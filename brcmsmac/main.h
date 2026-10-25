@@ -458,6 +458,7 @@ struct brcms_hardware {
  * pri_scb: primary Station Control Block
  * key_tbl: SHM address of the ucode's key table, 0 without hardware crypto.
  * keys: mac80211 key in each hardware key slot.
+ * key_algo: hardware algorithm of each key slot.
  * rx_amsdu: received A-MSDU being joined from its pieces.
  * ieee_stats: mac80211 low-level statistics.
  */
@@ -585,6 +586,7 @@ struct brcms_c_info {
 
 	u16 key_tbl;
 	struct ieee80211_key_conf *keys[WSEC_MAX_RCMTA_KEYS];
+	u8 key_algo[WSEC_MAX_RCMTA_KEYS];
 
 	struct sk_buff *rx_amsdu;
 	struct ieee80211_low_level_stats ieee_stats;

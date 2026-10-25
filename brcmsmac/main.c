@@ -3070,9 +3070,25 @@ static void brcms_c_key_init(struct brcms_c_info *wlc)
 int brcms_c_set_key(struct brcms_c_info *wlc, struct ieee80211_key_conf *key,
 		    const u8 *addr)
 {
+	u8 buf[D11_MAX_KEY_SIZE] = {};
 	int idx;
+	u8 algo;
 
-	if (!wlc->pub->up || !wlc->key_tbl || key->keylen != D11_MAX_KEY_SIZE)
+	switch (key->cipher) {
+	case WLAN_CIPHER_SUITE_WEP40:
+		algo = WSEC_ALGO_WEP1;
+		break;
+	case WLAN_CIPHER_SUITE_WEP104:
+		algo = WSEC_ALGO_WEP128;
+		break;
+	case WLAN_CIPHER_SUITE_CCMP:
+		algo = WSEC_ALGO_AES;
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	if (!wlc->pub->up || !wlc->key_tbl)
 		return -EOPNOTSUPP;
 
 	if (addr) {
@@ -3088,11 +3104,19 @@ int brcms_c_set_key(struct brcms_c_info *wlc, struct ieee80211_key_conf *key,
 			return -EOPNOTSUPP;
 	}
 
+	memcpy(buf, key->key, min_t(size_t, key->keylen, sizeof(buf)));
+
 	brcms_c_suspend_mac_and_wait(wlc);
-	brcms_c_write_key(wlc, idx, WSEC_ALGO_AES, key->key, addr);
+	brcms_c_write_key(wlc, idx, algo, buf, addr);
+	/* WEP also encrypts unicast frames with the default keys */
+	if (!addr)
+		brcms_b_mhf(wlc->hw, MHF1, MHF1_USEDEFKEYS,
+			    algo == WSEC_ALGO_WEP1 || algo == WSEC_ALGO_WEP128 ?
+			    MHF1_USEDEFKEYS : 0, BRCM_BAND_ALL);
 	brcms_c_enable_mac(wlc);
 
 	wlc->keys[idx] = key;
+	wlc->key_algo[idx] = algo;
 	key->hw_key_idx = idx;
 	return 0;
 }
@@ -6770,7 +6794,7 @@ brcms_c_d11hdrs_mac80211(struct brcms_c_info *wlc, struct ieee80211_hw *hw,
 	 */
 	if (key) {
 		mch |= (key->hw_key_idx << TXC_SECKEY_SHIFT) & TXC_SECKEY_MASK;
-		mch |= WSEC_ALGO_AES << TXC_SECTYPE_SHIFT;
+		mch |= wlc->key_algo[key->hw_key_idx] << TXC_SECTYPE_SHIFT;
 		memcpy(txh->IV, (u8 *)h + ieee80211_hdrlen(h->frame_control),
 		       min_t(size_t, key->iv_len, sizeof(txh->IV)));
 	}
