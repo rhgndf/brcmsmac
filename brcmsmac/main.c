@@ -7281,6 +7281,16 @@ prep_mac80211_status(struct brcms_c_info *wlc, struct d11rxhdr *rxh,
 	if (!(rxh->RxStatus2 & RXS_PHYRXST_VALID))
 		rx_status->flag |= RX_FLAG_NO_SIGNAL_VAL;
 
+	/* TODO: per-core power only verified on BCM43227 (core revision 30) */
+	if ((rxh->RxStatus2 & RXS_PHYRXST_VALID) &&
+	    D11REV_IS(wlc->pub->corerev, 30)) {
+		rx_status->chains = wlc->stf->rxchain;
+		rx_status->chain_signal[0] =
+			(s8)(rxh->PhyRxStatus_1 & PRXS1_nphy_PWR0_MASK);
+		rx_status->chain_signal[1] =
+			(s8)((rxh->PhyRxStatus_1 & PRXS1_nphy_PWR1_MASK) >> 8);
+	}
+
 	/* noise */
 	/* qual */
 	rx_status->antenna =
