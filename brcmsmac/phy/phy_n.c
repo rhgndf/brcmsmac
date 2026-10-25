@@ -273,7 +273,9 @@ static const u16 NPHY_IPA_REV4_txdigi_filtcoeffs[][NPHY_NUM_DIG_FILT_COEFFS] = {
 	{-375, 136, -399, 209, -1479, 949, 130, 260, 130,
 	 230, -44, 230, 201, -191, 201},
 	{0xed9, 0xc8, 0xe95, 0x8e, 0xa91, 0x33a, 0x97, 0x12d, 0x97,
-	 0x97, 0x12d, 0x97, 0x25a, 0xd10, 0x25a}
+	 0x97, 0x12d, 0x97, 0x25a, 0xd10, 0x25a},
+	{-375, 136, -407, 208, -1527, 956, 93, 186, 93,
+	 230, -44, 230, 201, -191, 201}
 };
 
 struct chan_info_nphy_2055 {
@@ -14801,6 +14803,10 @@ static void wlc_phy_ipa_set_tx_digi_filts_nphy(struct brcms_phy *pi)
 			for (j = 0; j < NPHY_NUM_DIG_FILT_COEFFS; j++)
 				write_phy_reg(pi, 0x186 + j,
 					NPHY_IPA_REV4_txdigi_filtcoeffs[5][j]);
+		} else if (NREV_IS(pi->pubpi.phy_rev, 16)) {
+			for (j = 0; j < NPHY_NUM_DIG_FILT_COEFFS; j++)
+				write_phy_reg(pi, 0x186 + j,
+					NPHY_IPA_REV4_txdigi_filtcoeffs[7][j]);
 		}
 
 		if (CHSPEC_CHANNEL(pi->radio_chanspec) == 14) {
