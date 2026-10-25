@@ -97,7 +97,7 @@
 					 * also need to update wlc.h MAXCOREREV
 					 */
 
-#define NCONF		0x000001ff	/* Supported nphy revs:
+#define NCONF		0x000101ff	/* Supported nphy revs:
 					 *      0       4321a0
 					 *      1       4321a1
 					 *      2       4321b0/b1/c0/c1
@@ -107,6 +107,7 @@
 					 *      6       43222a0, 43224a0
 					 *      7       43226a0
 					 *      8       5357a0, 43236a0
+					 *      16      43227a0
 					 */
 
 #define LCNCONF		0x00000007	/* Supported lcnphy revs:
