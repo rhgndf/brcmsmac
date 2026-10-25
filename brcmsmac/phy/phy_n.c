@@ -21498,6 +21498,11 @@ wlc_phy_chanspec_nphy_setup(struct brcms_phy *pi, u16 chanspec,
 	if (NREV_GE(pi->pubpi.phy_rev, 16) && CHSPEC_IS2G(chanspec))
 		wlc_phy_rxfilt_setup_nphy_rev16(pi, chanspec);
 
+	/* TODO: only verified on BCM43227 (core revision 30) */
+	if (NREV_GE(pi->pubpi.phy_rev, 16))
+		mod_phy_reg(pi, 0x324, 0x100,
+			    CHSPEC_IS40(chanspec) ? 0x100 : 0);
+
 	wlc_phy_spurwar_nphy(pi);
 
 	/* TODO: only verified on BCM43227 (N-PHY revision 16) */
