@@ -15501,6 +15501,44 @@ static void wlc_phy_workarounds_nphy_gainctrl_2057_rev6(struct brcms_phy *pi)
 	}
 }
 
+static void wlc_phy_workarounds_nphy_gainctrl_2057_rev9(struct brcms_phy *pi)
+{
+	static const s8 lna1G_gain_db_2057rev9[] = { 9, 14, 18, 24 };
+	static const s8 lna2G_gain_db_2057rev9[] = { -2, 7, 11, 16 };
+
+	mod_phy_reg(pi, 0x1c, (0x1 << 13), (1 << 13));
+	mod_phy_reg(pi, 0x32, (0x1 << 13), (1 << 13));
+
+	mod_phy_reg(pi, 0x27d, (0xff << 0), (0x50 << 0));
+	mod_phy_reg(pi, 0x283, (0xff << 0), (0x50 << 0));
+	mod_phy_reg(pi, 0x280, (0xff << 0), (0x50 << 0));
+
+	write_phy_reg(pi, 0x37, 0x70);
+	write_phy_reg(pi, 0x2ad, 0x70);
+	write_phy_reg(pi, 0x38, 0x218);
+	write_phy_reg(pi, 0x2ae, 0x218);
+
+	write_phy_reg(pi, 0x169, 0x1f02);
+
+	write_phy_reg(pi, 0x24, 0x62);
+	write_phy_reg(pi, 0x2ab, 0x62);
+	write_phy_reg(pi, 0x36, 0x34);
+	write_phy_reg(pi, 0x2ac, 0x34);
+
+	wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_GAIN1, 4, 0x8, 8,
+				 lna1G_gain_db_2057rev9);
+	wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_GAIN2, 4, 0x8, 8,
+				 lna1G_gain_db_2057rev9);
+
+	wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_GAIN1, 4, 0x10, 8,
+				 lna2G_gain_db_2057rev9);
+	wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_GAIN2, 4, 0x10, 8,
+				 lna2G_gain_db_2057rev9);
+
+	mod_phy_reg(pi, 0xa0, (0x1 << 13), (1 << 13));
+	mod_phy_reg(pi, 0xa0, (0x1 << 13), 0);
+}
+
 static void wlc_phy_workarounds_nphy_gainctrl(struct brcms_phy *pi)
 {
 	u16 w1th, hpf_code, currband;
@@ -15678,6 +15716,9 @@ static void wlc_phy_workarounds_nphy_gainctrl(struct brcms_phy *pi)
 				mod_phy_reg(pi, 0x280,
 					    (0xff << 0), (0x44 << 0));
 			}
+		} else if ((pi->pubpi.radiorev == 9) &&
+			   CHSPEC_IS2G(pi->radio_chanspec)) {
+			wlc_phy_workarounds_nphy_gainctrl_2057_rev9(pi);
 		} else {
 			wlc_phy_workarounds_nphy_gainctrl_2057_rev6(pi);
 		}
