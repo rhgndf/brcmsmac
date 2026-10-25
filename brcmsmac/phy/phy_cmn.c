@@ -706,8 +706,6 @@ void wlc_phy_init(struct brcms_phy_pub *pih, u16 chanspec)
 	if (pi->init_in_progress)
 		return;
 
-	pi->init_in_progress = true;
-
 	pi->radio_chanspec = chanspec;
 
 	mc = bcma_read32(pi->d11core, D11REGOFFS(maccontrol));
@@ -725,6 +723,8 @@ void wlc_phy_init(struct brcms_phy_pub *pih, u16 chanspec)
 
 	if (phy_init == NULL)
 		return;
+
+	pi->init_in_progress = true;
 
 	wlc_phy_anacore(pih, ON);
 
