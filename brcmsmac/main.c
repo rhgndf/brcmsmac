@@ -703,6 +703,15 @@ static void brcms_c_ucode_bsinit(struct brcms_hardware *wlc_hw)
 					  "%s: wl%d: unsupported phy in core rev %d\n",
 					  __func__, wlc_hw->unit,
 					  wlc_hw->corerev);
+		} else if (D11REV_IS(wlc_hw->corerev, 30)) {
+			if (BRCMS_ISNPHY(wlc_hw->band))
+				brcms_c_write_inits(wlc_hw,
+						    ucode->d11n16bsinitvals30);
+			else
+				brcms_err(wlc_hw->d11core,
+					  "%s: wl%d: unsupported phy in core rev %d\n",
+					  __func__, wlc_hw->unit,
+					  wlc_hw->corerev);
 		} else {
 			brcms_err(wlc_hw->d11core,
 				  "%s: wl%d: unsupported corerev %d\n",
@@ -2254,6 +2263,16 @@ static void brcms_ucode_download(struct brcms_hardware *wlc_hw)
 				  "%s: wl%d: unsupported phy in corerev %d\n",
 				  __func__, wlc_hw->unit, wlc_hw->corerev);
 		}
+	} else if (D11REV_IS(wlc_hw->corerev, 30)) {
+		if (BRCMS_ISNPHY(wlc_hw->band)) {
+			brcms_ucode_write(wlc_hw, ucode->bcm43xx_30_mimo,
+					  ucode->bcm43xx_30_mimosz);
+			wlc_hw->ucode_loaded = true;
+		} else {
+			brcms_err(wlc_hw->d11core,
+				  "%s: wl%d: unsupported phy in corerev %d\n",
+				  __func__, wlc_hw->unit, wlc_hw->corerev);
+		}
 	}
 }
 
@@ -3176,6 +3195,12 @@ static void brcms_b_coreinit(struct brcms_c_info *wlc)
 			brcms_err(core, "%s: wl%d: unsupported phy in corerev"
 				  " %d\n", __func__, wlc_hw->unit,
 				  wlc_hw->corerev);
+	} else if (D11REV_IS(wlc_hw->corerev, 30)) {
+		if (BRCMS_ISNPHY(wlc_hw->band))
+			brcms_c_write_inits(wlc_hw, ucode->d11n16initvals30);
+		else
+			brcms_err(core, "%s: wl%d: unsupported phy in corerev %d\n",
+				  __func__, wlc_hw->unit, wlc_hw->corerev);
 	} else {
 		brcms_err(core, "%s: wl%d: unsupported corerev %d\n",
 			  __func__, wlc_hw->unit, wlc_hw->corerev);

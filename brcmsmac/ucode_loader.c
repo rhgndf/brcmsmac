@@ -34,10 +34,15 @@ enum {
 	D11UCODE_OVERSIGHT24_LCN,
 	D11UCODE_OVERSIGHT24_LCNSZ,
 	D11UCODE_OVERSIGHT_BOMMAJOR,
-	D11UCODE_OVERSIGHT_BOMMINOR
+	D11UCODE_OVERSIGHT_BOMMINOR,
+	D11N16BSINITVALS30,
+	D11N16INITVALS30,
+	D11UCODE_OVERSIGHT30_MIMO,
+	D11UCODE_OVERSIGHT30_MIMOSZ
 };
 
-int brcms_ucode_data_init(struct brcms_info *wl, struct brcms_ucode *ucode)
+int brcms_ucode_data_init(struct brcms_info *wl, struct brcms_ucode *ucode,
+			  uint corerev)
 {
 	int rc;
 
@@ -88,6 +93,23 @@ int brcms_ucode_data_init(struct brcms_info *wl, struct brcms_ucode *ucode)
 	rc = rc < 0 ?
 	     rc : brcms_ucode_init_buf(wl, (void **)&ucode->bcm43xx_bomminor,
 				       D11UCODE_OVERSIGHT_BOMMINOR);
+	if (corerev == 30) {
+		rc = rc < 0 ?
+		     rc : brcms_ucode_init_buf(wl,
+					       (void **)&ucode->d11n16bsinitvals30,
+					       D11N16BSINITVALS30);
+		rc = rc < 0 ?
+		     rc : brcms_ucode_init_buf(wl,
+					       (void **)&ucode->d11n16initvals30,
+					       D11N16INITVALS30);
+		rc = rc < 0 ?
+		     rc : brcms_ucode_init_buf(wl,
+					       (void **)&ucode->bcm43xx_30_mimo,
+					       D11UCODE_OVERSIGHT30_MIMO);
+		rc = rc < 0 ?
+		     rc : brcms_ucode_init_uint(wl, &ucode->bcm43xx_30_mimosz,
+						D11UCODE_OVERSIGHT30_MIMOSZ);
+	}
 	return rc;
 }
 
@@ -102,8 +124,11 @@ void brcms_ucode_data_free(struct brcms_ucode *ucode)
 	brcms_ucode_free_buf((void *)ucode->d11n0absinitvals16);
 	brcms_ucode_free_buf((void *)ucode->d11n0bsinitvals16);
 	brcms_ucode_free_buf((void *)ucode->d11n0initvals16);
+	brcms_ucode_free_buf((void *)ucode->d11n16bsinitvals30);
+	brcms_ucode_free_buf((void *)ucode->d11n16initvals30);
 	brcms_ucode_free_buf((void *)ucode->bcm43xx_16_mimo);
 	brcms_ucode_free_buf((void *)ucode->bcm43xx_24_lcn);
+	brcms_ucode_free_buf((void *)ucode->bcm43xx_30_mimo);
 	brcms_ucode_free_buf((void *)ucode->bcm43xx_bommajor);
 	brcms_ucode_free_buf((void *)ucode->bcm43xx_bomminor);
 }

@@ -35,15 +35,20 @@ struct brcms_ucode {
 	struct d11init *d11n0absinitvals16;
 	struct d11init *d11n0bsinitvals16;
 	struct d11init *d11n0initvals16;
+	struct d11init *d11n16bsinitvals30;
+	struct d11init *d11n16initvals30;
 	__le32 *bcm43xx_16_mimo;
 	size_t bcm43xx_16_mimosz;
 	__le32 *bcm43xx_24_lcn;
 	size_t bcm43xx_24_lcnsz;
+	__le32 *bcm43xx_30_mimo;
+	size_t bcm43xx_30_mimosz;
 	u32 *bcm43xx_bommajor;
 	u32 *bcm43xx_bomminor;
 };
 
-int brcms_ucode_data_init(struct brcms_info *wl, struct brcms_ucode *ucode);
+int brcms_ucode_data_init(struct brcms_info *wl, struct brcms_ucode *ucode,
+			  uint corerev);
 
 void brcms_ucode_data_free(struct brcms_ucode *ucode);
 

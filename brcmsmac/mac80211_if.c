@@ -394,7 +394,7 @@ static int brcms_request_fw(struct brcms_info *wl, struct bcma_device *pdev)
 		    wl->fw.fw_hdr[i]->size / (sizeof(struct firmware_hdr));
 	}
 	wl->fw.fw_cnt = i;
-	status = brcms_ucode_data_init(wl, &wl->ucode);
+	status = brcms_ucode_data_init(wl, &wl->ucode, pdev->id.rev);
 	brcms_release_fw(wl);
 	return status;
 }
