@@ -85,6 +85,7 @@ int brcms_led_register(struct brcms_info *wl)
 
 	if (IS_ERR(radio_led->gpiod)) {
 		err = PTR_ERR(radio_led->gpiod);
+		radio_led->gpiod = NULL;
 		wiphy_err(wl->wiphy, "requesting led GPIO failed (err: %d)\n",
 			  err);
 		return err;
