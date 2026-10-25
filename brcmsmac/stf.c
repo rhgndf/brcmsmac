@@ -354,6 +354,9 @@ int brcms_c_stf_attach(struct brcms_c_info *wlc)
 		wlc->stf->ss_algosel_auto = true;
 		/* Init the default value */
 		wlc->stf->ss_algo_channel = (u16) -1;
+		/* STBC to peers that can receive it */
+		wlc->bandstate[BAND_2G_INDEX]->band_stf_stbc_tx = AUTO;
+		wlc->bandstate[BAND_5G_INDEX]->band_stf_stbc_tx = AUTO;
 	}
 	return 0;
 }

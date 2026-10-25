@@ -1093,6 +1093,16 @@ static int ieee_hw_rate_init(struct ieee80211_hw *hw)
 	if (D11REV_IS(wl->pub->corerev, 30))
 		hw->wiphy->bands[NL80211_BAND_2GHZ]->ht_cap.ampdu_density =
 			IEEE80211_HT_MPDU_DENSITY_4;
+
+	/* STBC needs a second TX chain; peers then report RX STBC */
+	if (BRCMS_STBC_CAP_PHY(wlc) && wlc->stf->txstreams > 1) {
+		enum nl80211_band b;
+
+		for (b = NL80211_BAND_2GHZ; b <= NL80211_BAND_5GHZ; b++)
+			if (hw->wiphy->bands[b])
+				hw->wiphy->bands[b]->ht_cap.cap |=
+					IEEE80211_HT_CAP_TX_STBC;
+	}
 	return 0;
 }
 

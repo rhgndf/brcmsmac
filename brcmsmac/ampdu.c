@@ -725,6 +725,7 @@ void brcms_c_ampdu_finalize(struct brcms_ampdu_session *session)
 		rspec |= (PHY_TXC1_BW_40MHZ << RSPEC_BW_SHIFT);
 	if (plcp3_issgi(plcp[3]))
 		rspec |= RSPEC_SHORT_GI;
+	rspec |= plcp3_stc(plcp[3]) << RSPEC_STC_SHIFT;
 
 	fbr_iscck = !(le16_to_cpu(txh->XtraFrameTypes) & 0x03);
 	if (fbr_iscck) {
@@ -737,6 +738,8 @@ void brcms_c_ampdu_finalize(struct brcms_ampdu_session *session)
 			rspec_fallback |= PHY_TXC1_BW_40MHZ << RSPEC_BW_SHIFT;
 		if (plcp3_issgi(txh->FragPLCPFallback[3]))
 			rspec_fallback |= RSPEC_SHORT_GI;
+		rspec_fallback |= plcp3_stc(txh->FragPLCPFallback[3]) <<
+				  RSPEC_STC_SHIFT;
 	}
 
 	if (use_rts || use_cts) {

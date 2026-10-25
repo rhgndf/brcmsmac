@@ -6315,7 +6315,7 @@ brcms_c_d11hdrs_mac80211(struct brcms_c_info *wlc, struct ieee80211_hw *hw,
 
 				/* For SISO MCS use STBC if possible */
 				if (is_mcs_rate(rspec[k])
-				    && BRCMS_STF_SS_STBC_TX(wlc, scb)) {
+				    && BRCMS_STF_SS_STBC_TX(wlc, tx_info)) {
 					u8 stc;
 
 					/* Nss for single stream is always 1 */

@@ -213,9 +213,9 @@ struct brcms_stf {
 	s8 spatial_policy;
 };
 
-#define BRCMS_STF_SS_STBC_TX(wlc, scb) \
+#define BRCMS_STF_SS_STBC_TX(wlc, tx_info) \
 	(((wlc)->stf->txstreams > 1) && (((wlc)->band->band_stf_stbc_tx == ON) \
-	 || (((scb)->flags & SCB_STBCCAP) && \
+	 || (((tx_info)->flags & IEEE80211_TX_CTL_STBC) && \
 	     (wlc)->band->band_stf_stbc_tx == AUTO && \
 	     isset(&((wlc)->stf->ss_algo_channel), PHY_TXC1_MODE_STBC))))
 

@@ -157,6 +157,11 @@ static inline bool plcp3_issgi(u8 plcp)
 	return (plcp & (RSPEC_SHORT_GI >> 16)) != 0;
 }
 
+static inline uint plcp3_stc(u8 plcp)
+{
+	return (plcp & (RSPEC_STC_MASK >> 16)) >> (RSPEC_STC_SHIFT - 16);
+}
+
 static inline uint rspec_stc(u32 rspec)
 {
 	return (rspec & RSPEC_STC_MASK) >> RSPEC_STC_SHIFT;
