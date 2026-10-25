@@ -127,3 +127,29 @@ brcmsmac does not set `SUPPORTS_HT_CCK_RATES`.
 
 **Fix:** send frames whose primary rate is not an MCS outside an A-MPDU,
 as ath9k does (`ath_lookup_rate()`, `ath_lookup_legacy()`).
+
+## A station never switches to the short slot time
+
+mac80211 reports `BSS_CHANGED_ERP_SLOT` together with
+`BSS_CHANGED_ASSOC`. `brcms_ops_bss_info_changed()` handles the
+association first (`brcmsmac/mac80211_if.c:592-599`), so when it passes
+the slot setting on (line 611), `brcms_c_set_shortslot_override()`
+(`brcmsmac/main.c:5477`) finds the station associated and leaves the
+change to "watchdog or beacon processing" (line 5489). Nothing there
+calls `brcms_c_switch_shortslot()` (line 3768). Its only caller is the
+unassociated branch at line 5492, which turns the short slot off. The
+station keeps the 20 us slot of 802.11b on every BSS.
+
+On a BCM43227 associated to an RTL8812AU access point that reports
+`short-slot-time`, IHR `ifs_slot` (0x684) held 0x0212 and SHM
+`M_DOT11_SLOT` 20, where wl writes 0x0207 at association. With the
+short slot written by hand, TCP ran at 92.6-114.5 Mbit/s up and
+104.1-121.7 Mbit/s down, against 92.1-102 and 94.7-118.6 Mbit/s with the
+long slot over the same three rounds. That is within the run-to-run
+variation of this lab, which has no other stations.
+
+Reachable on every device in station mode on 2.4 GHz.
+
+**Fix:** apply the slot setting while associated, for example by
+calling `brcms_c_switch_shortslot()` from
+`brcms_c_set_shortslot_override()` when the core is up.
