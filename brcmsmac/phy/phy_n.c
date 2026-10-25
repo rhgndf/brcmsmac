@@ -16139,6 +16139,16 @@ static void wlc_phy_workarounds_nphy_rev7(struct brcms_phy *pi)
 	static const u8 rfseq_rx2tx_dlys_rev3_ipa[] =
 		{ 8, 6, 6, 4, 4, 16, 43, 1, 1 };
 	static const u16 rfseq_rx2tx_dacbufpu_rev7[] = { 0x10f, 0x10f };
+	static const u8 rfseq_tx2rx_events_rev16[] = {
+		NPHY_REV3_RFSEQ_CMD_EXT_PA,
+		NPHY_REV3_RFSEQ_CMD_INT_PA_PU,
+		NPHY_REV3_RFSEQ_CMD_RXPD_TXPD,
+		NPHY_REV3_RFSEQ_CMD_TR_SWITCH,
+		NPHY_REV3_RFSEQ_CMD_RXG_FBW,
+		NPHY_REV3_RFSEQ_CMD_CLR_HIQ_DIS,
+		NPHY_REV3_RFSEQ_CMD_END
+	};
+	static const u8 rfseq_tx2rx_dlys_rev16[] = { 70, 4, 4, 4, 4, 6, 1 };
 	u32 leg_data_weights;
 	u8 chan_freq_range = 0;
 	static const u16 dac_control = 0x0002;
@@ -16198,12 +16208,26 @@ static void wlc_phy_workarounds_nphy_rev7(struct brcms_phy *pi)
 		mod_phy_reg(pi, 0x167, (0x7f << 8), (64 << 8));
 	}
 
+	if (NREV_GE(pi->pubpi.phy_rev, 16)) {
+		write_phy_reg(pi, 0x145, 293);
+		write_phy_reg(pi, 0x146, 435);
+		write_phy_reg(pi, 0x147, 261);
+		write_phy_reg(pi, 0x148, 366);
+		write_phy_reg(pi, 0x149, 205);
+		write_phy_reg(pi, 0x14a, 32);
+	}
+
 	if (NREV_LE(pi->pubpi.phy_rev, 8)) {
 		write_phy_reg(pi, 0x23f, 0x1b0);
 		write_phy_reg(pi, 0x240, 0x1b0);
+	} else if (NREV_GE(pi->pubpi.phy_rev, 16)) {
+		write_phy_reg(pi, 0x23f, 0x7ff);
+		write_phy_reg(pi, 0x240, 0x7ff);
 	}
 
-	if (NREV_GE(pi->pubpi.phy_rev, 8))
+	if (NREV_GE(pi->pubpi.phy_rev, 16))
+		mod_phy_reg(pi, 0xbd, (0xff << 0), (160 << 0));
+	else if (NREV_GE(pi->pubpi.phy_rev, 8))
 		mod_phy_reg(pi, 0xbd, (0xff << 0), (114 << 0));
 
 	wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_AFECTRL, 1, 0x00, 16,
@@ -16221,6 +16245,12 @@ static void wlc_phy_workarounds_nphy_rev7(struct brcms_phy *pi)
 				 2, 0x15e, 16, rfseq_rx2tx_dacbufpu_rev7);
 	wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_RFSEQ, 2, 0x16e, 16,
 				 rfseq_rx2tx_dacbufpu_rev7);
+
+	if (NREV_GE(pi->pubpi.phy_rev, 16))
+		wlc_phy_set_rfseq_nphy(pi, NPHY_RFSEQ_TX2RX,
+				       rfseq_tx2rx_events_rev16,
+				       rfseq_tx2rx_dlys_rev16,
+				       ARRAY_SIZE(rfseq_tx2rx_events_rev16));
 
 	if (PHY_IPA(pi))
 		wlc_phy_set_rfseq_nphy(pi, NPHY_RFSEQ_RX2TX,
