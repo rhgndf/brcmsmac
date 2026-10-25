@@ -1087,6 +1087,11 @@ static int ieee_hw_rate_init(struct ieee80211_hw *hw)
 			return -EPERM;
 		}
 	}
+
+	/* TODO: 4 us MPDU spacing only verified on BCM43227 (core revision 30) */
+	if (D11REV_IS(wl->pub->corerev, 30))
+		hw->wiphy->bands[NL80211_BAND_2GHZ]->ht_cap.ampdu_density =
+			IEEE80211_HT_MPDU_DENSITY_4;
 	return 0;
 }
 
