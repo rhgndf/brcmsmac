@@ -83,3 +83,54 @@ Reachable on every device in AP mode with a power saving client.
 ATIM/BCMC FIFO sized for it; or set `HOST_BROADCAST_PS_BUFFERING` and
 release frames with `ieee80211_get_buffered_bc()` after each DTIM
 beacon.
+
+## Loading brcmsmac before the bcma bus is registered oopses in the LED code
+
+`brcms_led_register()` (`brcmsmac/led.c:82`, called from
+`brcms_attach()`, `mac80211_if.c:1256`) requests the radio LED line from
+the ChipCommon GPIO chip, `bus->drv_cc.gpio`, without checking that the
+chip has been registered. bcma registers it last:
+`bcma_register_devices()` (`drivers/bcma/main.c`) adds the 802.11 core
+with `device_add()`, which probes a driver that is already loaded, and
+only then calls `bcma_gpio_init()`. If brcmsmac is loaded when the bus
+is registered, `gpiochip_request_own_desc()` dereferences the chip's
+NULL `gpiodev`:
+
+```
+BUG: kernel NULL pointer dereference, address: 00000000000003cc
+RIP: 0010:gpiochip_request_own_desc+0x2b/0x180
+ brcms_led_register+0xc4/0x180 [brcmsmac]
+ brcms_bcma_probe+0x59b/0x5d6 [brcmsmac]
+ bcma_device_probe+0x2f/0x60 [bcma]
+ ...
+ bcma_bus_register+0x4dd/0x570 [bcma]
+ bcma_host_pci_probe+0x160/0x1d0 [bcma]
+```
+
+The probing task dies holding the CPU hotplug lock, so CPUs taken
+offline afterwards (by mmiotrace, for example) cannot come back until a
+reboot. On a BCM43227: with the PCI device held by another driver, load
+bcma and brcmsmac, release the device, and bind it to
+`bcma-pci-bridge`. The usual order, bcma binding the device when it is
+loaded and brcmsmac loaded afterwards, does not hit it.
+
+Reachable on every device whose SPROM assigns a radio LED, whenever
+brcmsmac is loaded before the bus is registered.
+
+**Fix:** register the GPIO chip before the cores in bcma, or skip the
+LED in brcmsmac when the chip has no `gpiodev` yet.
+
+## A failed PHY init check leaves init_in_progress set
+
+`wlc_phy_init()` (`brcmsmac/phy/phy_cmn.c:706-751`) sets
+`pi->init_in_progress` and returns early, without clearing it, when the
+MAC is running (`WARN` at line 714), when the core has no fast clock
+(line 721) or when the PHY has no init function. Every later
+`wlc_phy_init()` then returns at the `init_in_progress` check at line
+706, so the PHY is never initialised again until the driver is
+reloaded, and no further warning is printed.
+
+Not seen on the BCM43227. It is reachable whenever one of the two
+warnings fires.
+
+**Fix:** clear `init_in_progress` on the early returns.
