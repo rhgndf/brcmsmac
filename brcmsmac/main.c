@@ -600,8 +600,7 @@ static uint brcms_c_calc_frame_time(struct brcms_c_info *wlc, u32 ratespec,
 		if (preamble_type == BRCMS_MM_PREAMBLE)
 			dur += PREN_MM_EXT;
 		/* 1000Ndbps = kbps * 4 */
-		kNdps = mcs_2_rate(mcs, rspec_is40mhz(ratespec),
-				   rspec_issgi(ratespec)) * 4;
+		kNdps = mcs_2_rate(mcs, rspec_is40mhz(ratespec), false) * 4;
 
 		if (rspec_stc(ratespec) == 0)
 			nsyms =
@@ -613,6 +612,8 @@ static uint brcms_c_calc_frame_time(struct brcms_c_info *wlc, u32 ratespec,
 			    2 *
 			    CEIL((APHY_SERVICE_NBITS + 8 * mac_len +
 				  APHY_TAIL_NBITS) * 1000, 2 * kNdps);
+		if (rspec_issgi(ratespec))
+			nsyms = CEIL(9 * nsyms, 10);
 
 		dur += APHY_SYMBOL_TIME * nsyms;
 		if (wlc->band->bandtype == BRCM_BAND_2G)
@@ -5768,9 +5769,11 @@ brcms_c_calc_frame_len(struct brcms_c_info *wlc, u32 ratespec,
 		if (wlc->band->bandtype == BRCM_BAND_2G)
 			dur -= DOT11_OFDM_SIGNAL_EXTENSION;
 		/* kNdbps = kbps * 4 */
-		kNdps =	mcs_2_rate(mcs, rspec_is40mhz(ratespec),
-				   rspec_issgi(ratespec)) * 4;
+		kNdps =	mcs_2_rate(mcs, rspec_is40mhz(ratespec), false) * 4;
 		nsyms = dur / APHY_SYMBOL_TIME;
+		/* short GI fits 10 symbols in the time of 9 */
+		if (rspec_issgi(ratespec))
+			nsyms = nsyms * 10 / 9;
 		mac_len =
 		    ((nsyms * kNdps) -
 		     ((APHY_SERVICE_NBITS + APHY_TAIL_NBITS) * 1000)) / 8000;
@@ -6374,8 +6377,12 @@ brcms_c_d11hdrs_mac80211(struct brcms_c_info *wlc, struct ieee80211_hw *hw,
 			else
 				rspec[k] |= (mimo_ctlchbw << RSPEC_BW_SHIFT);
 
-			/* Disable short GI, not supported yet */
-			rspec[k] &= ~RSPEC_SHORT_GI;
+			/* Short GI as selected by rate control */
+			if (is_mcs_rate(rspec[k]) &&
+			    (txrate[k]->flags & IEEE80211_TX_RC_SHORT_GI))
+				rspec[k] |= RSPEC_SHORT_GI;
+			else
+				rspec[k] &= ~RSPEC_SHORT_GI;
 
 			mimo_preamble_type = BRCMS_MM_PREAMBLE;
 			if (txrate[k]->flags & IEEE80211_TX_RC_GREEN_FIELD)
@@ -7157,8 +7164,7 @@ brcms_c_calc_lsig_len(struct brcms_c_info *wlc, u32 ratespec,
 		 * of regular ofdm
 		 */
 		/* 1000Ndbps = kbps * 4 */
-		kNdps = mcs_2_rate(mcs, rspec_is40mhz(ratespec),
-				   rspec_issgi(ratespec)) * 4;
+		kNdps = mcs_2_rate(mcs, rspec_is40mhz(ratespec), false) * 4;
 
 		if (rspec_stc(ratespec) == 0)
 			nsyms =
@@ -7170,6 +7176,8 @@ brcms_c_calc_lsig_len(struct brcms_c_info *wlc, u32 ratespec,
 			    2 *
 			    CEIL((APHY_SERVICE_NBITS + 8 * mac_len +
 				  APHY_TAIL_NBITS) * 1000, 2 * kNdps);
+		if (rspec_issgi(ratespec))
+			nsyms = CEIL(9 * nsyms, 10);
 
 		/* (+3) account for HT-SIG(2) and HT-STF(1) */
 		nsyms += (tot_streams + 3);
