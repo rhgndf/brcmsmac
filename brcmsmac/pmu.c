@@ -105,6 +105,7 @@ u16 si_pmu_fast_pwrup_delay(struct si_pub *sih)
 	switch (ai_get_chip_id(sih)) {
 	case BCMA_CHIP_ID_BCM43224:
 	case BCMA_CHIP_ID_BCM43225:
+	case BCMA_CHIP_ID_BCM43227:
 	case BCMA_CHIP_ID_BCM4313:
 		delay = 3700;
 		break;
