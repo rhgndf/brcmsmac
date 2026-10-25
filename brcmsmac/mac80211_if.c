@@ -1235,6 +1235,16 @@ static int brcms_bcma_probe(struct bcma_device *pdev)
 	    (pdev->id.id != BCMA_CORE_80211))
 		return -ENODEV;
 
+	/*
+	 * The DMA engines are programmed with 32-bit bus addresses only, so
+	 * do not rely on the mask the shared host device was left with.
+	 */
+	ret = dma_set_mask_and_coherent(pdev->dma_dev, DMA_BIT_MASK(32));
+	if (ret) {
+		dev_err(&pdev->dev, "32-bit DMA is not supported\n");
+		return ret;
+	}
+
 	hw = ieee80211_alloc_hw(sizeof(struct brcms_info), &brcms_ops);
 	if (!hw) {
 		pr_err("%s: ieee80211_alloc_hw failed\n", __func__);
