@@ -98,3 +98,49 @@ Not seen on the BCM43227. It is reachable whenever one of the two
 warnings fires.
 
 **Fix:** clear `init_in_progress` on the early returns.
+
+## Going down during the PHY calibration stops it for good
+
+The N-PHY calibration runs in phases from `phycal_timer`.
+`wlc_phy_cal_perical()` (`brcmsmac/phy/phy_cmn.c:2356-2363`) starts it
+5 ms after each PHY init by setting `mphase_cal_phase_id` to
+`MPHASE_CAL_STATE_INIT` and arming the timer. Each phase re-arms the
+timer until the last one returns the state to `MPHASE_CAL_STATE_IDLE`
+(`wlc_phy_timercb_phycal()`, line 364). While a scan is in progress,
+the callback restarts the sequence with a 1 s delay.
+
+`wlc_phy_down()` (line 772) deletes the timer but leaves
+`mphase_cal_phase_id` as it is. The callback's reset for a down core
+(line 370) never runs, because the timer no longer fires. After the
+next up:
+
+- `wlc_phy_init_nphy()` (`brcmsmac/phy/phy_n.c:19525-19528`) only starts
+  the calibration when the state is `MPHASE_CAL_STATE_IDLE`.
+- The watchdog's periodic calibration (`phy_cmn.c:2402`) only schedules
+  one when none is pending (`PHY_PERICAL_MPHASE_PENDING()`).
+
+The state stays pending with no timer, and the PHY is not calibrated
+again until the driver is reloaded. That covers TX IQ/LO, RX IQ and
+the periodic recalibration.
+
+NetworkManager hits this on every load: it brings a new interface up
+and scans, then takes it down again to set its MAC address. On a
+BCM43227 (firmware 832.127) managed only by NetworkManager, PHY
+registers 0x9a-0x9d (the RX IQ coefficients,
+`wlc_phy_rx_iq_coeffs_nphy()`) were still 0 20 s after the load. With
+the state reset in `wlc_phy_down()` they were 0x33, 0xe, 0xb and 0xb.
+On a 2.4 GHz HT20 AP at -42 dBm:
+
+| | without the reset | with the reset | wl |
+|---|---|---|---|
+| ping loss at fixed MCS7 | 12% | 2% | |
+| ping loss at fixed MCS15 | 100% | 88% | |
+| TCP upload | 14.4 Mbit/s | 19.5 Mbit/s | 13.6 Mbit/s |
+| TCP download | did not complete (3 tries) | 37.4 Mbit/s | 46.8 Mbit/s |
+
+Reachable on every N-PHY device: `nphy_perical` is
+`PHY_PERICAL_MPHASE` unless the core-active override is in use
+(`phy_n.c:19616-19621`).
+
+**Fix:** set `mphase_cal_phase_id` to `MPHASE_CAL_STATE_IDLE` in
+`wlc_phy_down()`, or call `wlc_phy_cal_perical_mphase_reset()` there.
