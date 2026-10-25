@@ -430,6 +430,10 @@ static int brcms_ops_start(struct ieee80211_hw *hw)
 			return -ENOENT;
 	}
 
+	/* probe skips the LED if bcma had not registered its GPIO chip yet */
+	if (!wl->radio_led.gpiod)
+		brcms_led_register(wl);
+
 	ieee80211_wake_queues(hw);
 	spin_lock_bh(&wl->lock);
 	blocked = brcms_rfkill_set_hw_state(wl);

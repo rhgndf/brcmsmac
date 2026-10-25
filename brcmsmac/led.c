@@ -44,8 +44,10 @@ void brcms_led_unregister(struct brcms_info *wl)
 {
 	if (wl->led_dev.dev)
 		led_classdev_unregister(&wl->led_dev);
-	if (wl->radio_led.gpiod)
+	if (wl->radio_led.gpiod) {
 		gpiochip_free_own_desc(wl->radio_led.gpiod);
+		gpio_device_put(gpiod_to_gpio_device(wl->radio_led.gpiod));
+	}
 }
 
 int brcms_led_register(struct brcms_info *wl)
@@ -78,6 +80,12 @@ int brcms_led_register(struct brcms_info *wl)
 	if (hwnum == -1)
 		return -ENODEV;
 
+	/* bcma registers its GPIO chip only after probing the cores */
+	if (!bcma_gpio->gpiodev) {
+		wiphy_err(wl->wiphy, "led GPIO chip not registered\n");
+		return -ENODEV;
+	}
+
 	/* Try to obtain this LED GPIO line */
 	radio_led->gpiod = gpiochip_request_own_desc(bcma_gpio, hwnum,
 						     "radio on", lflags,
@@ -90,6 +98,12 @@ int brcms_led_register(struct brcms_info *wl)
 			  err);
 		return err;
 	}
+
+	/*
+	 * An own desc holds no reference to the GPIO device, and bcma removes
+	 * the GPIO chip before the cores. Keep the device until the LED is off.
+	 */
+	gpio_device_get(gpiod_to_gpio_device(radio_led->gpiod));
 
 	snprintf(wl->radio_led.name, sizeof(wl->radio_led.name),
 		 "brcmsmac-%s:radio", wiphy_name(wl->wiphy));
