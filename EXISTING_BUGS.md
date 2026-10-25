@@ -85,3 +85,22 @@ session.
 to `get_sifs(wlc->band) + brcms_c_calc_ba_time(wlc, rspec[k],
 BRCMS_SHORT_PREAMBLE)`, as `brcms_c_compute_rtscts_dur()` does for the
 BlockAck.
+
+## Received A-MPDU members are reported at MCS 0
+
+`prep_mac80211_status()`, `brcmsmac/main.c:6989-6995`, takes the rate
+of every received frame from the PLCP in front of it
+(`brcms_c_compute_rspec()`, `brcmsmac/rate.c:343`). The microcode passes
+the PLCP with the first MPDU of an A-MPDU only. The PLCP bytes of the
+other members are zero, which decode as MCS 0, 20 MHz, long guard
+interval and no STBC.
+
+On a BCM43227 downloading at HT20 MCS 13-15 from the RTL8812AU peer,
+21773 of 25222 frames in 5 s had a zeroed PLCP. Afterwards `iw` reports
+"rx bitrate: 6.5 MBit/s MCS 0", and mac80211's receive rate statistics
+and radiotap show MCS 0 for those frames. Throughput is not affected.
+Reachable on every device with a receive Block Ack session.
+
+**Fix:** keep the rate fields of the last frame that came with a PLCP in
+`struct brcms_c_info`, and use them for the following frames whose PLCP
+is all zero (an HT-SIG length of 0, which no real PPDU has).
