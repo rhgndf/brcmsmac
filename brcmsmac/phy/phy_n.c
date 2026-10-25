@@ -13668,6 +13668,41 @@ static u32 nphy_tpc_txgain_ipa_2g_2057rev7[] = {
 	0x300f0715, 0x300f0715, 0x300f0715, 0x300f0715
 };
 
+static u32 nphy_tpc_txgain_ipa_2g_2057rev9[] = {
+	0x60ff0031, 0x60e7002c, 0x60cf002a, 0x60c70029,
+	0x60b70029, 0x60a70029, 0x609f002a, 0x6097002b,
+	0x6087002e, 0x60770031, 0x606f0032, 0x60670034,
+	0x60670031, 0x605f0033, 0x605f0031, 0x60570033,
+	0x60570030, 0x6057002d, 0x6057002b, 0x604f002d,
+	0x604f002b, 0x604f0029, 0x604f0026, 0x60470029,
+	0x60470027, 0x603f0029, 0x603f0027, 0x603f0025,
+	0x60370029, 0x60370027, 0x60370024, 0x602f002a,
+	0x602f0028, 0x602f0026, 0x602f0024, 0x6027002a,
+	0x60270028, 0x60270026, 0x60270024, 0x60270022,
+	0x601f002b, 0x601f0029, 0x601f0027, 0x601f0024,
+	0x601f0022, 0x601f0020, 0x601f001f, 0x601f001d,
+	0x60170029, 0x60170027, 0x60170025, 0x60170023,
+	0x60170021, 0x6017001f, 0x6017001d, 0x6017001c,
+	0x6017001a, 0x60170018, 0x60170018, 0x60170016,
+	0x60170015, 0x600f0029, 0x600f0027, 0x600f0025,
+	0x600f0023, 0x600f0021, 0x600f001f, 0x600f001d,
+	0x600f001c, 0x600f001a, 0x600f0019, 0x600f0018,
+	0x600f0016, 0x600f0015, 0x600f0115, 0x600f0215,
+	0x600f0315, 0x600f0415, 0x600f0515, 0x600f0615,
+	0x600f0715, 0x600f0715, 0x600f0715, 0x600f0715,
+	0x600f0715, 0x600f0715, 0x600f0715, 0x600f0715,
+	0x600f0715, 0x600f0715, 0x600f0715, 0x600f0715,
+	0x600f0715, 0x600f0715, 0x600f0715, 0x600f0715,
+	0x600f0715, 0x600f0715, 0x600f0715, 0x600f0715,
+	0x600f0715, 0x600f0715, 0x600f0715, 0x600f0715,
+	0x600f0715, 0x600f0715, 0x600f0715, 0x600f0715,
+	0x600f0715, 0x600f0715, 0x600f0715, 0x600f0715,
+	0x600f0715, 0x600f0715, 0x600f0715, 0x600f0715,
+	0x600f0715, 0x600f0715, 0x600f0715, 0x600f0715,
+	0x600f0715, 0x600f0715, 0x600f0715, 0x600f0715,
+	0x600f0715, 0x600f0715, 0x600f0715, 0x600f0715
+};
+
 static u32 nphy_tpc_txgain_ipa_5g[] = {
 	0x7ff70035, 0x7ff70033, 0x7ff70032, 0x7ff70031,
 	0x7ff7002f, 0x7ff7002e, 0x7ff7002d, 0x7ff7002b,
@@ -13802,6 +13837,13 @@ static s16 nphy_papd_padgain_dlt_2g_2057rev7[] = {
 	-43, -39, -35, -32, -28, -26, -23, -21,
 	-18, -16, -15, -13, -11, -10, -8, -7,
 	-6, -5, -4, -3, -2, -1, -1, 0
+};
+
+static const s16 nphy_papd_padgain_dlt_2g_2057rev9[] = {
+	-133, -133, -107, -92, -81, -73, -66, -61,
+	-56, -52, -48, -44, -41, -37, -34, -31,
+	-28, -25, -22, -19, -17, -14, -12, -10,
+	-9, -7, -5, -4, -3, -2, -1, 0
 };
 
 static s8 nphy_papd_pgagain_dlt_5g_2057[] = {
@@ -14702,6 +14744,8 @@ static s32 get_rf_pwr_offset(struct brcms_phy *pi, s16 pga_gn, s16 pad_gn)
 			rfpwr_offset = (s16)
 				       nphy_papd_padgain_dlt_2g_2057rev7
 				       [pad_gn];
+		else if (pi->pubpi.radiorev == 9)
+			rfpwr_offset = nphy_papd_padgain_dlt_2g_2057rev9[pad_gn];
 	} else {
 		if ((pi->pubpi.radiorev == 3) ||
 		    (pi->pubpi.radiorev == 4) ||
@@ -17828,6 +17872,9 @@ static u32 *wlc_phy_get_ipa_gaintbl_nphy(struct brcms_phy *pi)
 				 || (pi->pubpi.radiorev == 8))
 				tx_pwrctrl_tbl =
 					nphy_tpc_txgain_ipa_2g_2057rev7;
+			else if (pi->pubpi.radiorev == 9)
+				tx_pwrctrl_tbl =
+					nphy_tpc_txgain_ipa_2g_2057rev9;
 		} else if (NREV_IS(pi->pubpi.phy_rev, 6)) {
 			tx_pwrctrl_tbl = nphy_tpc_txgain_ipa_rev6;
 			if (pi->sh->chip == BCMA_CHIP_ID_BCM47162)
@@ -24877,7 +24924,7 @@ wlc_phy_a2_nphy(struct brcms_phy *pi, struct nphy_ipa_txcalgains *txgains,
 		}
 
 		if (cal_mode == CAL_GCTRL) {
-			if ((pi->pubpi.radiorev == 5)
+			if ((pi->pubpi.radiorev == 5 || pi->pubpi.radiorev == 9)
 			    && (CHSPEC_IS2G(pi->radio_chanspec)))
 				phy_a1 = 55;
 			else if (((pi->pubpi.radiorev == 7) &&
@@ -25117,7 +25164,8 @@ static u8 wlc_phy_a3_nphy(struct brcms_phy *pi, u8 start_gain, u8 core)
 					ARRAY_SIZE(pad_gain_codes_used_2057rev5) - 1;
 
 			} else if ((pi->pubpi.radiorev == 7)
-				   || (pi->pubpi.radiorev == 8)) {
+				   || (pi->pubpi.radiorev == 8)
+				   || (pi->pubpi.radiorev == 9)) {
 
 				phy_a15 = pad_gain_codes_used_2057rev7;
 				phy_a13 =
@@ -25317,7 +25365,8 @@ static void wlc_phy_a4(struct brcms_phy *pi, bool full_cal)
 							phy_b5);
 
 				} else if ((pi->pubpi.radiorev == 7)
-					   || (pi->pubpi.radiorev == 8)) {
+					   || (pi->pubpi.radiorev == 8)
+					   || (pi->pubpi.radiorev == 9)) {
 
 					pi->nphy_papd_cal_gain_index[phy_b5] =
 						0;
@@ -25405,6 +25454,10 @@ static void wlc_phy_a4(struct brcms_phy *pi, bool full_cal)
 					   (pi->pubpi.radiorev == 8)) {
 					phy_b12 = -(
 					    nphy_papd_padgain_dlt_2g_2057rev7
+							     [phy_b8] + 1) / 2;
+				} else if (pi->pubpi.radiorev == 9) {
+					phy_b12 = -(
+					    nphy_papd_padgain_dlt_2g_2057rev9
 							     [phy_b8] + 1) / 2;
 				}
 			} else {
