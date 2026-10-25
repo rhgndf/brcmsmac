@@ -3389,6 +3389,10 @@ static void brcms_b_coreinit(struct brcms_c_info *wlc)
 	/* Set up frame burst size and antenna swap threshold init values */
 	brcms_b_write_shm(wlc_hw, M_MBURST_SIZE, MAXTXFRAMEBURST);
 	brcms_b_write_shm(wlc_hw, M_MAX_ANTCNT, ANTCNT);
+	/* TODO: frames over 2352 bytes only verified on BCM43227 (core revision 30) */
+	if (D11REV_IS(wlc_hw->corerev, 30))
+		brcms_b_write_shm(wlc_hw, M_MAXRXFRM_LEN, D11_PHY_HDR_LEN +
+				  IEEE80211_MAX_MPDU_LEN_VHT_7991);
 
 	/* enable one rx interrupt per received frame */
 	bcma_write32(core, D11REGOFFS(intrcvlazy[0]), (1 << IRL_FC_SHIFT));

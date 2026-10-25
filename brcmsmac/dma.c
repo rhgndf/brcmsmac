@@ -576,6 +576,7 @@ struct dma_pub *dma_attach(char *name, struct brcms_c_info *wlc,
 	 * both Rx Overflow Continue and Parity are DISABLED.
 	 */
 	_dma_ctrlflags(di, DMA_CTRL_ROC | DMA_CTRL_PEN, 0);
+	_dma_ctrlflags(di, DMA_CTRL_RXMULTI, DMA_CTRL_RXMULTI);
 
 	brcms_dbg_dma(di->core, "%s: %s flags 0x%x ntxd %d nrxd %d "
 		      "rxbufsize %d rxextheadroom %d nrxpost %d rxoffset %d "
@@ -925,7 +926,7 @@ int dma_rx(struct dma_pub *pub, struct sk_buff_head *skb_list)
 {
 	struct dma_info *di = container_of(pub, struct dma_info, dma);
 	struct sk_buff_head dma_frames;
-	struct sk_buff *p, *next;
+	struct sk_buff *p, *next, *frame;
 	uint len;
 	uint pkt_len;
 	int resid = 0;
@@ -971,7 +972,8 @@ int dma_rx(struct dma_pub *pub, struct sk_buff_head *skb_list)
 		}
 #endif				/* DEBUG */
 
-		if ((di->dma.dmactrlflags & DMA_CTRL_RXMULTI) == 0) {
+		if ((di->dma.dmactrlflags & DMA_CTRL_RXMULTI) == 0 ||
+		    resid > 0) {
 			brcms_dbg_dma(di->core, "%s: bad frame length (%d)\n",
 				      di->name, len);
 			skb_queue_walk_safe(&dma_frames, p, next) {
@@ -982,6 +984,19 @@ int dma_rx(struct dma_pub *pub, struct sk_buff_head *skb_list)
 			pktcnt = 1;
 			goto next_frame;
 		}
+
+		/* join the buffers into one frame */
+		frame = dev_alloc_skb(di->rxoffset + len);
+		skb_queue_walk_safe(&dma_frames, p, next) {
+			skb_unlink(p, &dma_frames);
+			if (frame)
+				skb_put_data(frame, p->data, p->len);
+			brcmu_pkt_buf_free_skb(p);
+		}
+		pktcnt = 1;
+		if (!frame)
+			goto next_frame;
+		skb_queue_tail(&dma_frames, frame);
 	}
 
 	skb_queue_splice_tail(&dma_frames, skb_list);
