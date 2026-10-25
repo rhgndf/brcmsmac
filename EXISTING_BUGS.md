@@ -56,3 +56,30 @@ up.
 
 **Fix:** stop requesting the sample, or report its result to mac80211
 through `get_survey` so that it is used.
+
+## AP mode sends group frames for sleeping clients at once, not after DTIM
+
+In AP mode, when a client is in power save, mac80211 marks broadcast
+and multicast frames `IEEE80211_TX_CTL_SEND_AFTER_DTIM` and leaves
+holding them until after the next DTIM beacon to the device (brcmsmac
+does not set `HOST_BROADCAST_PS_BUFFERING`). brcmsmac ignores the flag:
+`brcms_c_sendpkt_mac80211()` and `brcms_c_tx()` (`brcmsmac/main.c:6821`,
+`6768`) always pick the FIFO of the frame's access category, so the
+frame goes out immediately while the client sleeps. The microcode's
+broadcast/multicast FIFO (`TX_BCMC_FIFO`), which it releases after the
+DTIM beacon, is never used: `bcmc_fid_generate()` (`main.c:5628`) and
+the `M_BCMC_FID` update (`main.c:6792`) are reachable only through a
+queue number that no caller produces (`main.c:6179` calls it an
+assertion).
+
+On a BCM43227 AP (firmware 832.127) with an RTL8812AU client in power
+save, 1 of 6 broadcast pings was answered; unicast pings to the same
+client all were (28-210 ms, delivered after the TIM).
+
+Reachable on every device in AP mode with a power saving client.
+
+**Fix:** queue frames with `IEEE80211_TX_CTL_SEND_AFTER_DTIM` on
+`TX_BCMC_FIFO` with a frame ID from `bcmc_fid_generate()`, and keep the
+ATIM/BCMC FIFO sized for it; or set `HOST_BROADCAST_PS_BUFFERING` and
+release frames with `ieee80211_get_buffered_bc()` after each DTIM
+beacon.
