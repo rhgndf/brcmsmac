@@ -16196,6 +16196,13 @@ static void wlc_phy_workarounds_nphy_rev7(struct brcms_phy *pi)
 	u16 aux_adc_vmid_rev7_core0[] = { 0x8e, 0x96, 0x96, 0x96 };
 	u16 aux_adc_vmid_rev7_core1[] = { 0x8f, 0x9f, 0x9f, 0x96 };
 	u16 aux_adc_gain_rev7[] = { 0x02, 0x02, 0x02, 0x02 };
+	static const u16 aux_adc_vmid_2057rev9_core0[] = {
+		0x86, 0xb4, 0xb4, 0x88
+	};
+	static const u16 aux_adc_vmid_2057rev9_core1[] = {
+		0x90, 0xb4, 0xb4, 0x8c
+	};
+	static const u16 aux_adc_gain_2057rev9[] = { 0x02, 0x02, 0x02, 0x00 };
 	s32 min_nvar_val = 0x18d;
 	s32 min_nvar_offset_6mbps = 20;
 	u8 pdetrange;
@@ -16691,6 +16698,19 @@ static void wlc_phy_workarounds_nphy_rev7(struct brcms_phy *pi)
 					aux_adc_vmid_rev7_core0[3] = 0x96;
 					aux_adc_vmid_rev7_core1[3] = 0x96;
 					aux_adc_gain_rev7[3] = 0;
+				}
+			} else if (pi->pubpi.radiorev == 9) {
+				if (chan_freq_range ==
+				    WL_CHAN_FREQ_RANGE_2G) {
+					memcpy(aux_adc_vmid_rev7_core0,
+					       aux_adc_vmid_2057rev9_core0,
+					       sizeof(aux_adc_vmid_rev7_core0));
+					memcpy(aux_adc_vmid_rev7_core1,
+					       aux_adc_vmid_2057rev9_core1,
+					       sizeof(aux_adc_vmid_rev7_core1));
+					memcpy(aux_adc_gain_rev7,
+					       aux_adc_gain_2057rev9,
+					       sizeof(aux_adc_gain_rev7));
 				}
 			}
 		}
