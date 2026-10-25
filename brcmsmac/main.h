@@ -451,6 +451,8 @@ struct brcms_hardware {
  * tx_duty_cycle_cck: maximum allowed duty cycle for CCK.
  * wiphy:
  * pri_scb: primary Station Control Block
+ * key_tbl: SHM address of the ucode's key table, 0 without hardware crypto.
+ * keys: mac80211 key in each hardware key slot.
  */
 struct brcms_c_info {
 	struct brcms_pub *pub;
@@ -569,6 +571,9 @@ struct brcms_c_info {
 	u16 beacon_tim_offset;
 	u16 beacon_dtim_period;
 	struct sk_buff *probe_resp;
+
+	u16 key_tbl;
+	struct ieee80211_key_conf *keys[WSEC_MAX_RCMTA_KEYS];
 };
 
 /* antsel module specific state */
@@ -635,6 +640,8 @@ void brcms_c_inval_dma_pkts(struct brcms_hardware *hw,
 void brcms_c_update_probe_resp(struct brcms_c_info *wlc, bool suspend);
 int brcms_c_set_nmode(struct brcms_c_info *wlc);
 void brcms_c_beacon_phytxctl_txant_upd(struct brcms_c_info *wlc, u32 bcn_rate);
+bool brcms_c_tx_key_valid(struct brcms_c_info *wlc,
+			  struct ieee80211_tx_info *tx_info);
 void brcms_b_antsel_type_set(struct brcms_hardware *wlc_hw, u8 antsel_type);
 void brcms_b_set_chanspec(struct brcms_hardware *wlc_hw, u16 chanspec,
 			  bool mute, struct txpwr_limits *txpwr);

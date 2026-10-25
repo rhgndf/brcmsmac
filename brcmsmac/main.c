@@ -21,6 +21,7 @@
 #include <linux/if_ether.h>
 #include <net/cfg80211.h>
 #include <net/mac80211.h>
+#include <linux/unaligned.h>
 #include <brcm_hw_ids.h>
 #include <aiutils.h>
 #include <chipcommon.h>
@@ -2990,6 +2991,114 @@ static void brcms_c_copyto_shm(struct brcms_c_info *wlc, uint offset,
 			const void *buf, int len)
 {
 	brcms_b_copyto_objmem(wlc->hw, offset, buf, len, OBJADDR_SHM_SEL);
+}
+
+static void brcms_c_write_rcmta(struct brcms_c_info *wlc, int idx,
+				const u8 *addr)
+{
+	struct bcma_device *core = wlc->hw->d11core;
+	static const u8 zero[ETH_ALEN];
+
+	if (!addr)
+		addr = zero;
+
+	bcma_write32(core, D11REGOFFS(objaddr), OBJADDR_RCMTA_SEL | (idx * 2));
+	(void)bcma_read32(core, D11REGOFFS(objaddr));
+	bcma_write32(core, D11REGOFFS(objdata), get_unaligned_le32(addr));
+	bcma_write32(core, D11REGOFFS(objaddr),
+		     OBJADDR_RCMTA_SEL | (idx * 2 + 1));
+	(void)bcma_read32(core, D11REGOFFS(objaddr));
+	bcma_write16(core, D11REGOFFS(objdata), get_unaligned_le16(addr + 4));
+}
+
+static void brcms_c_write_key(struct brcms_c_info *wlc, int idx, u8 algo,
+			      const u8 *key, const u8 *addr)
+{
+	u8 buf[D11_MAX_KEY_SIZE] = {};
+	bool pairwise = idx >= WSEC_MAX_DEFAULT_KEYS;
+
+	if (pairwise)
+		brcms_c_write_rcmta(wlc, idx - WSEC_MAX_DEFAULT_KEYS, NULL);
+	if (key)
+		memcpy(buf, key, sizeof(buf));
+	brcms_b_write_shm(wlc->hw, M_SECKINDXALGO_BLK + idx * 2,
+			  (idx << SKL_INDEX_SHIFT) | algo);
+	brcms_c_copyto_shm(wlc, wlc->key_tbl + idx * D11_MAX_KEY_SIZE,
+			   buf, sizeof(buf));
+	if (pairwise && addr)
+		brcms_c_write_rcmta(wlc, idx - WSEC_MAX_DEFAULT_KEYS, addr);
+}
+
+static void brcms_c_key_init(struct brcms_c_info *wlc)
+{
+	int i;
+
+	memset(wlc->keys, 0, sizeof(wlc->keys));
+
+	/* the ucode publishes its key table as a word address */
+	wlc->key_tbl = brcms_b_read_shm(wlc->hw, M_SECRXKEYS_PTR) * 2;
+	if (!wlc->key_tbl)
+		return;
+
+	bcma_write16(wlc->hw->d11core, D11REGOFFS(rcmta_size), RCMTA_SIZE);
+	for (i = 0; i < WSEC_MAX_RCMTA_KEYS; i++)
+		brcms_c_write_key(wlc, i, WSEC_ALGO_OFF, NULL, NULL);
+}
+
+int brcms_c_set_key(struct brcms_c_info *wlc, struct ieee80211_key_conf *key,
+		    const u8 *addr)
+{
+	int idx;
+
+	if (!wlc->pub->up || !wlc->key_tbl || key->keylen != D11_MAX_KEY_SIZE)
+		return -EOPNOTSUPP;
+
+	if (addr) {
+		for (idx = WSEC_MAX_DEFAULT_KEYS; idx < WSEC_MAX_RCMTA_KEYS;
+		     idx++)
+			if (!wlc->keys[idx])
+				break;
+		if (idx == WSEC_MAX_RCMTA_KEYS)
+			return -ENOSPC;
+	} else {
+		idx = key->keyidx;
+		if (idx >= WSEC_MAX_DEFAULT_KEYS)
+			return -EOPNOTSUPP;
+	}
+
+	brcms_c_suspend_mac_and_wait(wlc);
+	brcms_c_write_key(wlc, idx, WSEC_ALGO_AES, key->key, addr);
+	brcms_c_enable_mac(wlc);
+
+	wlc->keys[idx] = key;
+	key->hw_key_idx = idx;
+	return 0;
+}
+
+void brcms_c_clear_key(struct brcms_c_info *wlc, struct ieee80211_key_conf *key)
+{
+	int idx = key->hw_key_idx;
+
+	/* a core restart has already cleared the slot */
+	if (idx >= WSEC_MAX_RCMTA_KEYS || wlc->keys[idx] != key)
+		return;
+
+	wlc->keys[idx] = NULL;
+	if (!wlc->pub->up)
+		return;
+
+	brcms_c_suspend_mac_and_wait(wlc);
+	brcms_c_write_key(wlc, idx, WSEC_ALGO_OFF, NULL, NULL);
+	brcms_c_enable_mac(wlc);
+}
+
+bool brcms_c_tx_key_valid(struct brcms_c_info *wlc,
+			  struct ieee80211_tx_info *tx_info)
+{
+	struct ieee80211_key_conf *key = tx_info->control.hw_key;
+
+	return !key || (key->hw_key_idx < WSEC_MAX_RCMTA_KEYS &&
+			wlc->keys[key->hw_key_idx] == key);
 }
 
 static void brcms_b_retrylimit_upd(struct brcms_hardware *wlc_hw,
@@ -6192,6 +6301,7 @@ brcms_c_d11hdrs_mac80211(struct brcms_c_info *wlc, struct ieee80211_hw *hw,
 	struct ieee80211_tx_rate *txrate[2];
 	int k;
 	struct ieee80211_tx_info *tx_info;
+	struct ieee80211_key_conf *key;
 	bool is_mcs;
 	u16 mimo_txbw;
 	u8 mimo_preamble_type;
@@ -6200,12 +6310,16 @@ brcms_c_d11hdrs_mac80211(struct brcms_c_info *wlc, struct ieee80211_hw *hw,
 	h = (struct ieee80211_hdr *)(p->data);
 	qos = ieee80211_is_data_qos(h->frame_control);
 
+	/* Get tx_info */
+	tx_info = IEEE80211_SKB_CB(p);
+	key = tx_info->control.hw_key;
+
 	/* compute length of frame in bytes for use in PLCP computations */
 	len = p->len;
 	phylen = len + FCS_LEN;
-
-	/* Get tx_info */
-	tx_info = IEEE80211_SKB_CB(p);
+	/* the hardware appends the MIC */
+	if (key)
+		phylen += key->icv_len;
 
 	/* add PLCP */
 	plcp = skb_push(p, D11_PHY_HDR_LEN);
@@ -6511,6 +6625,17 @@ brcms_c_d11hdrs_mac80211(struct brcms_c_info *wlc, struct ieee80211_hw *hw,
 	    (preamble_type[1] == BRCMS_GF_PREAMBLE)) {
 		if (rspec2rate(rspec[1]) != BRCM_RATE_1M)
 			mch |= TXC_PREAMBLE_DATA_FB_SHORT;
+	}
+
+	/*
+	 * The hardware encrypts with the key in slot hw_key_idx, taking the
+	 * IV that mac80211 has placed after the MAC header.
+	 */
+	if (key) {
+		mch |= (key->hw_key_idx << TXC_SECKEY_SHIFT) & TXC_SECKEY_MASK;
+		mch |= WSEC_ALGO_AES << TXC_SECTYPE_SHIFT;
+		memcpy(txh->IV, (u8 *)h + ieee80211_hdrlen(h->frame_control),
+		       min_t(size_t, key->iv_len, sizeof(txh->IV)));
 	}
 
 	/* MacFrameControl */
@@ -6854,6 +6979,10 @@ bool brcms_c_sendpkt_mac80211(struct brcms_c_info *wlc, struct sk_buff *sdu,
 	uint fifo;
 	struct scb *scb = &wlc->pri_scb;
 
+	/* never send a frame in the clear that mac80211 wants encrypted */
+	if (!brcms_c_tx_key_valid(wlc, IEEE80211_SKB_CB(sdu)))
+		goto toss;
+
 	/* only frames at an MCS rate can be aggregated */
 	if (!(IEEE80211_SKB_CB(sdu)->control.rates[0].flags &
 	      IEEE80211_TX_RC_MCS))
@@ -6862,6 +6991,8 @@ bool brcms_c_sendpkt_mac80211(struct brcms_c_info *wlc, struct sk_buff *sdu,
 	brcms_c_d11hdrs_mac80211(wlc, hw, sdu, scb, 0, 1, fifo, 0);
 	if (!brcms_c_tx(wlc, sdu))
 		return true;
+
+ toss:
 
 	/* packet discarded */
 	dev_kfree_skb_any(sdu);
@@ -7103,10 +7234,16 @@ prep_mac80211_status(struct brcms_c_info *wlc, struct d11rxhdr *rxh,
 	if (plcp3_issgi(plcp[3]))
 		rx_status->enc_flags |= RX_ENC_FLAG_SHORT_GI;
 
-	if (rxh->RxStatus1 & RXS_DECERR) {
-		rx_status->flag |= RX_FLAG_FAILED_PLCP_CRC;
-		brcms_err(wlc->hw->d11core, "%s:  RX_FLAG_FAILED_PLCP_CRC\n",
-			  __func__);
+	/*
+	 * The IV and the MIC stay in the frame, so mac80211 still strips
+	 * them and checks the packet number.
+	 */
+	if (rxh->RxStatus1 & RXS_DECATMPT) {
+		uint idx = (rxh->RxStatus1 & RXS_SECKINDX_MASK) >>
+			   RXS_SECKINDX_SHIFT;
+
+		if (idx < WSEC_MAX_RCMTA_KEYS && wlc->keys[idx])
+			rx_status->flag |= RX_FLAG_DECRYPTED;
 	}
 	if (rxh->RxStatus1 & RXS_FCSERR) {
 		rx_status->flag |= RX_FLAG_FAILED_FCS_CRC;
@@ -7635,6 +7772,10 @@ static void brcms_c_recv(struct brcms_c_info *wlc, struct sk_buff *p)
 			goto toss;
 	}
 
+	/* the hardware has modified the frame, so software cannot retry */
+	if (rxh->RxStatus1 & RXS_DECERR)
+		goto toss;
+
 	/* check received pkt has at least frame control field */
 	if (len < D11_PHY_HDR_LEN + sizeof(h->frame_control))
 		goto toss;
@@ -7812,6 +7953,7 @@ void brcms_c_init(struct brcms_c_info *wlc, bool mute_tx)
 	chanspec = ch20mhz_chspec(ch->hw_value);
 
 	brcms_b_init(wlc->hw, chanspec);
+	brcms_c_key_init(wlc);
 
 	/* update beacon listen interval */
 	brcms_c_bcn_li_upd(wlc);

@@ -1005,6 +1005,8 @@ struct tx_status {
 #define ADDR_BMP_BSS_IDX_MASK	(3 << 8)	/* BSS control block index */
 #define ADDR_BMP_BSS_IDX_SHIFT	8
 
+/* key slots: the default (group) keys, then one per RCMTA entry */
+#define	WSEC_MAX_DEFAULT_KEYS	4
 #define	WSEC_MAX_RCMTA_KEYS	54
 
 /* max keys in M_TKMICKEYS_BLK */

@@ -279,6 +279,7 @@ do {						\
 struct wiphy;
 struct ieee80211_sta;
 struct ieee80211_tx_queue_params;
+struct ieee80211_key_conf;
 struct brcms_info;
 struct brcms_c_info;
 struct brcms_hardware;

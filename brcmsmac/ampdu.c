@@ -987,7 +987,8 @@ brcms_c_ampdu_dotxstatus_complete(struct ampdu_info *ampdu, struct scb *scb,
 		/* either retransmit or send bar if ack not recd */
 		if (!ack_recd) {
 			if (retry && (ini->txretry[index] < (int)retry_limit) &&
-			    (!ba_recd || bindex < SEQNUM_MAX / 2)) {
+			    (!ba_recd || bindex < SEQNUM_MAX / 2) &&
+			    brcms_c_tx_key_valid(wlc, tx_info)) {
 				int ret;
 				ini->txretry[index]++;
 				ret = brcms_c_txfifo(wlc, queue, p);

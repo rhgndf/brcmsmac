@@ -112,6 +112,10 @@ MODULE_DEVICE_TABLE(bcma, brcms_coreid_table);
 module_param_named(debug, brcm_msg_level, uint, 0644);
 #endif
 
+static bool brcms_nohwcrypt;
+module_param_named(nohwcrypt, brcms_nohwcrypt, bool, 0444);
+MODULE_PARM_DESC(nohwcrypt, "Disable hardware encryption");
+
 static struct ieee80211_channel brcms_2ghz_chantable[] = {
 	CHAN2GHZ(1, 2412, IEEE80211_CHAN_NO_HT40MINUS),
 	CHAN2GHZ(2, 2417, IEEE80211_CHAN_NO_HT40MINUS),
@@ -926,6 +930,43 @@ static void brcms_ops_flush(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			   "ret=%d\n", jiffies_to_msecs(ret));
 }
 
+static int brcms_ops_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
+			     struct ieee80211_vif *vif,
+			     struct ieee80211_sta *sta,
+			     struct ieee80211_key_conf *key)
+{
+	struct brcms_info *wl = hw->priv;
+	bool pairwise = key->flags & IEEE80211_KEY_FLAG_PAIRWISE;
+	int err = 0;
+
+	if (cmd == SET_KEY) {
+		if (brcms_nohwcrypt || key->cipher != WLAN_CIPHER_SUITE_CCMP)
+			return -EOPNOTSUPP;
+		/* group keys of several transmitters need more key slots */
+		if (!pairwise && vif->type != NL80211_IFTYPE_STATION &&
+		    vif->type != NL80211_IFTYPE_AP)
+			return -EOPNOTSUPP;
+		if (pairwise && !sta)
+			return -EOPNOTSUPP;
+	}
+
+	spin_lock_bh(&wl->lock);
+	if (cmd == SET_KEY) {
+		err = brcms_c_set_key(wl->wlc, key,
+				      pairwise ? sta->addr : NULL);
+		if (!err) {
+			key->flags |= IEEE80211_KEY_FLAG_GENERATE_IV;
+			/* protected management frames stay in software */
+			key->flags |= IEEE80211_KEY_FLAG_SW_MGMT_TX;
+		}
+	} else {
+		brcms_c_clear_key(wl->wlc, key);
+	}
+	spin_unlock_bh(&wl->lock);
+
+	return err;
+}
+
 static u64 brcms_ops_get_tsf(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 {
 	struct brcms_info *wl = hw->priv;
@@ -988,6 +1029,7 @@ static const struct ieee80211_ops brcms_ops = {
 	.ampdu_action = brcms_ops_ampdu_action,
 	.rfkill_poll = brcms_ops_rfkill_poll,
 	.flush = brcms_ops_flush,
+	.set_key = brcms_ops_set_key,
 	.get_tsf = brcms_ops_get_tsf,
 	.set_tsf = brcms_ops_set_tsf,
 	.set_tim = brcms_ops_beacon_set_tim,
