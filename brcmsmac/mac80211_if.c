@@ -555,9 +555,7 @@ static int brcms_ops_config(struct ieee80211_hw *hw, int radio_idx,
 			       str_true_false(conf->flags &
 					      IEEE80211_CONF_MONITOR));
 	if (changed & IEEE80211_CONF_CHANGE_PS)
-		brcms_err(core, "%s: change power-save mode: %s (implement)\n",
-			  __func__,
-			  str_true_false(conf->flags & IEEE80211_CONF_PS));
+		brcms_c_set_ps(wl->wlc, conf->flags & IEEE80211_CONF_PS);
 
 	if (changed & IEEE80211_CONF_CHANGE_POWER) {
 		err = brcms_c_set_tx_power(wl->wlc, conf->power_level);
@@ -591,6 +589,38 @@ static int brcms_ops_config(struct ieee80211_hw *hw, int radio_idx,
 	return err;
 }
 
+static void brcms_ps_off(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
+{
+	struct brcms_info *wl = hw->priv;
+	struct ieee80211_sta *sta;
+	struct sk_buff *skb;
+	bool hps;
+
+	spin_lock_bh(&wl->lock);
+	hps = wl->pub->up && brcms_c_get_hps(wl->wlc);
+	spin_unlock_bh(&wl->lock);
+	if (!hps)
+		return;
+
+	skb = ieee80211_nullfunc_get(hw, vif, -1, false);
+	if (!skb)
+		return;
+	skb->priority = 7;
+	skb_set_queue_mapping(skb, IEEE80211_AC_VO);
+
+	rcu_read_lock();
+	if (ieee80211_tx_prepare_skb(hw, vif, skb,
+				     hw->conf.chandef.chan->band, &sta)) {
+		spin_lock_bh(&wl->lock);
+		if (!wl->pub->up)
+			ieee80211_free_txskb(hw, skb);
+		else if (brcms_c_sendpkt_mac80211(wl->wlc, skb, hw))
+			IEEE80211_SKB_CB(skb)->rate_driver_data[0] = sta;
+		spin_unlock_bh(&wl->lock);
+	}
+	rcu_read_unlock();
+}
+
 static void
 brcms_ops_bss_info_changed(struct ieee80211_hw *hw,
 			struct ieee80211_vif *vif,
@@ -609,6 +639,9 @@ brcms_ops_bss_info_changed(struct ieee80211_hw *hw,
 		brcms_c_associate_upd(wl->wlc, vif->cfg.assoc);
 		spin_unlock_bh(&wl->lock);
 	}
+	if (changed & BSS_CHANGED_PS && !vif->cfg.ps &&
+	    vif->type == NL80211_IFTYPE_STATION && vif->cfg.assoc)
+		brcms_ps_off(hw, vif);
 	if (changed & BSS_CHANGED_ERP_SLOT) {
 		s8 val;
 
@@ -1154,10 +1187,22 @@ static int ieee_hw_rate_init(struct ieee80211_hw *hw)
  */
 static int ieee_hw_init(struct ieee80211_hw *hw)
 {
+	struct brcms_info *wl = hw->priv;
+
 	ieee80211_hw_set(hw, AMPDU_AGGREGATION);
 	ieee80211_hw_set(hw, SIGNAL_DBM);
 	ieee80211_hw_set(hw, REPORTS_TX_ACK_STATUS);
 	ieee80211_hw_set(hw, MFP_CAPABLE);
+
+	/*
+	 * Station power save is only verified on the BCM43227 (core revision
+	 * 30) with firmware 832.127; leave it to the user to turn it on.
+	 */
+	if (D11REV_IS(wl->pub->corerev, 30)) {
+		ieee80211_hw_set(hw, SUPPORTS_PS);
+		ieee80211_hw_set(hw, PS_NULLFUNC_STACK);
+		hw->wiphy->flags &= ~WIPHY_FLAG_PS_ON_BY_DEFAULT;
+	}
 
 	hw->extra_tx_headroom = brcms_c_get_header_len();
 	hw->queues = N_TX_QUEUES;

@@ -65,6 +65,7 @@
 #define PHY_HOLD_FOR_PLT	8
 #define PHY_HOLD_FOR_MUTE	16
 #define PHY_HOLD_FOR_NOT_ASSOC 0x20
+#define PHY_HOLD_FOR_PS		0x40
 
 #define PHY_MUTE_FOR_PREISM	1
 #define PHY_MUTE_ALL		0xffffffff

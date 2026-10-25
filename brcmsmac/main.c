@@ -3159,8 +3159,8 @@ static void brcms_b_antsel_set(struct brcms_hardware *wlc_hw, u32 antsel_avail)
  */
 static bool brcms_c_ps_allowed(struct brcms_c_info *wlc)
 {
-	/* not supporting PS so always return false for now */
-	return false;
+	return wlc->hps && wlc->pub->associated &&
+	       wlc->bsscfg->type == BRCMS_TYPE_STATION;
 }
 
 static void brcms_c_statsupd(struct brcms_c_info *wlc)
@@ -3856,15 +3856,18 @@ static void brcms_c_set_ps_ctrl(struct brcms_c_info *wlc)
 			   hps);
 
 	v1 = bcma_read32(wlc->hw->d11core, D11REGOFFS(maccontrol));
-	v2 = MCTL_WAKE;
+	v2 = 0;
 	if (hps)
 		v2 |= MCTL_HPS;
+	if (!(hps && wlc->ps) || !wlc->ps_tbtt || wlc->ps_poll)
+		v2 |= MCTL_WAKE;
 
 	brcms_b_mctrl(wlc->hw, MCTL_WAKE | MCTL_HPS, v2);
+	wlc_phy_hold_upd(wlc->band->pi, PHY_HOLD_FOR_PS, !(v2 & MCTL_WAKE));
 
 	awake_before = ((v1 & MCTL_WAKE) || ((v1 & MCTL_HPS) == 0));
 
-	if (!awake_before)
+	if (!awake_before && (v2 & MCTL_WAKE))
 		brcms_b_wait_for_wake(wlc->hw);
 }
 
@@ -4444,6 +4447,9 @@ static void brcms_c_info_init(struct brcms_c_info *wlc, int unit)
 	/* default mac retry limits */
 	wlc->SRL = RETRY_SHORT_DEF;
 	wlc->LRL = RETRY_LONG_DEF;
+
+	/* wake up every DTIM beacon in power save */
+	wlc->bcn_li_dtim = 1;
 
 	/* WME QoS mode is Auto by default */
 	wlc->pub->_ampdu = AMPDU_AGG_HOST;
@@ -5600,6 +5606,28 @@ static void brcms_c_time_unlock(struct brcms_c_info *wlc)
 	bcma_read32(wlc->hw->d11core, D11REGOFFS(maccontrol));
 }
 
+/* The TBTT after the current TSF: where the TSF is a multiple of interval. */
+static u32 brcms_c_next_tbtt(struct brcms_c_info *wlc, u32 interval)
+{
+	u64 tsf = brcms_c_tsf_get(wlc);
+	u32 rem;
+
+	div_u64_rem(tsf, interval, &rem);
+	return tsf + interval - rem;
+}
+
+static void brcms_c_set_tbtt(struct brcms_c_info *wlc, u16 period)
+{
+	u32 bcnint_us = period << 10;
+
+	brcms_c_time_lock(wlc);
+	bcma_write32(wlc->hw->d11core, D11REGOFFS(tsf_cfprep),
+		     (bcnint_us << CFPREP_CBI_SHIFT));
+	bcma_write32(wlc->hw->d11core, D11REGOFFS(tsf_cfpstart),
+		     brcms_c_next_tbtt(wlc, bcnint_us));
+	brcms_c_time_unlock(wlc);
+}
+
 int brcms_c_set_beacon_period(struct brcms_c_info *wlc, u16 period)
 {
 	u32 bcnint_us;
@@ -5608,6 +5636,12 @@ int brcms_c_set_beacon_period(struct brcms_c_info *wlc, u16 period)
 		return -EINVAL;
 
 	wlc->default_bss->beacon_period = period;
+	wlc->bsscfg->current_bss.beacon_period = period;
+
+	if (wlc->bsscfg->type == BRCMS_TYPE_STATION) {
+		brcms_c_set_tbtt(wlc, period);
+		return 0;
+	}
 
 	bcnint_us = period << 10;
 	brcms_c_time_lock(wlc);
@@ -5617,6 +5651,68 @@ int brcms_c_set_beacon_period(struct brcms_c_info *wlc, u16 period)
 	brcms_c_time_unlock(wlc);
 
 	return 0;
+}
+
+void brcms_c_set_ps(struct brcms_c_info *wlc, bool ps)
+{
+	wlc->ps = ps;
+	wlc->ps_tbtt = false;
+	wlc->ps_poll = false;
+	if (!wlc->pub->up)
+		return;
+	if (ps && wlc->bsscfg->current_bss.beacon_period)
+		brcms_c_set_tbtt(wlc, wlc->bsscfg->current_bss.beacon_period);
+	brcms_c_set_ps_ctrl(wlc);
+}
+
+/* frames to the AP go out with the PM bit set */
+bool brcms_c_get_hps(struct brcms_c_info *wlc)
+{
+	return wlc->hps;
+}
+
+static void brcms_c_tx_update_ps(struct brcms_c_info *wlc, struct sk_buff *skb)
+{
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	bool hps, ps_poll;
+
+	if (wlc->bsscfg->type != BRCMS_TYPE_STATION ||
+	    info->flags & IEEE80211_TX_CTL_INJECTED ||
+	    !ether_addr_equal(hdr->addr1, wlc->bsscfg->BSSID))
+		return;
+	if (ieee80211_has_pm(hdr->frame_control))
+		hps = true;
+	else if (wlc->ps && wlc->pub->ieee_hw->conf.dynamic_ps_timeout <= 0)
+		hps = wlc->hps;
+	else
+		hps = false;
+	ps_poll = wlc->ps_poll || ieee80211_is_pspoll(hdr->frame_control);
+	if (hps == wlc->hps && ps_poll == wlc->ps_poll)
+		return;
+	wlc->hps = hps;
+	wlc->ps_poll = ps_poll;
+	brcms_c_set_ps_ctrl(wlc);
+}
+
+static void brcms_c_rx_ps(struct brcms_c_info *wlc, struct ieee80211_hdr *hdr)
+{
+	bool held = !wlc->ps_tbtt || wlc->ps_poll;
+	u16 period = wlc->bsscfg->current_bss.beacon_period;
+
+	if (ieee80211_is_beacon(hdr->frame_control)) {
+		if (period &&
+		    bcma_read32(wlc->hw->d11core, D11REGOFFS(tsf_cfpstart)) !=
+		    brcms_c_next_tbtt(wlc, period << 10))
+			brcms_c_set_tbtt(wlc, period);
+		wlc->ps_tbtt = true;
+		wlc->ps_poll = false;
+	} else if (!is_multicast_ether_addr(hdr->addr1) &&
+		   !ieee80211_has_morefrags(hdr->frame_control)) {
+		wlc->ps_poll = false;
+	}
+	if (held != (!wlc->ps_tbtt || wlc->ps_poll))
+		brcms_c_set_ps_ctrl(wlc);
 }
 
 u16 brcms_c_get_phy_type(struct brcms_c_info *wlc, int phyidx)
@@ -6986,6 +7082,7 @@ bool brcms_c_sendpkt_mac80211(struct brcms_c_info *wlc, struct sk_buff *sdu,
 	if (!brcms_c_tx_key_valid(wlc, IEEE80211_SKB_CB(sdu)))
 		goto toss;
 
+	brcms_c_tx_update_ps(wlc, sdu);
 	/* only frames at an MCS rate can be aggregated */
 	if (!(IEEE80211_SKB_CB(sdu)->control.rates[0].flags &
 	      IEEE80211_TX_RC_MCS))
@@ -7644,6 +7741,12 @@ void brcms_c_scan_stop(struct brcms_c_info *wlc)
 void brcms_c_associate_upd(struct brcms_c_info *wlc, bool state)
 {
 	wlc->pub->associated = state;
+	if (!state) {
+		wlc->hps = false;
+		wlc->ps_poll = false;
+	}
+	if (wlc->pub->up)
+		brcms_c_set_ps_ctrl(wlc);
 }
 
 /*
@@ -7863,6 +7966,12 @@ static void brcms_c_recv(struct brcms_c_info *wlc, struct sk_buff *p)
 	if (len < D11_PHY_HDR_LEN + sizeof(h->frame_control))
 		goto toss;
 
+	if (wlc->ps && !(rxh->RxStatus1 & RXS_FCSERR) &&
+	    !ieee80211_is_ctl(h->frame_control) &&
+	    len >= D11_PHY_HDR_LEN + sizeof(struct ieee80211_hdr_3addr) &&
+	    ether_addr_equal(h->addr2, wlc->bsscfg->BSSID))
+		brcms_c_rx_ps(wlc, h);
+
 	brcms_c_recvctl(wlc, rxh, p);
 	return;
 
@@ -8040,18 +8149,12 @@ void brcms_c_init(struct brcms_c_info *wlc, bool mute_tx)
 	brcms_c_set_mac(wlc->bsscfg);
 	brcms_c_set_bssid(wlc->bsscfg);
 
-	/* Update tsf_cfprep if associated and up */
+	/* the init path resets the TBTT timer, so wait for a beacon again */
 	if (wlc->pub->associated && wlc->pub->up) {
-		u32 bi;
-
-		/* get beacon period and convert to uS */
-		bi = wlc->bsscfg->current_bss.beacon_period << 10;
-		/*
-		 * update since init path would reset
-		 * to default value
-		 */
-		bcma_write32(core, D11REGOFFS(tsf_cfprep),
-			     bi << CFPREP_CBI_SHIFT);
+		if (wlc->bsscfg->current_bss.beacon_period)
+			brcms_c_set_tbtt(wlc,
+					 wlc->bsscfg->current_bss.beacon_period);
+		wlc->ps_tbtt = false;
 
 		/* Update maccontrol PM related bits */
 		brcms_c_set_ps_ctrl(wlc);

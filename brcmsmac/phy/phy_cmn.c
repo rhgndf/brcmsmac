@@ -2250,7 +2250,8 @@ void wlc_phy_watchdog(struct brcms_phy_pub *pih)
 	if (!pi->watchdog_override)
 		return;
 
-	if (!(SCAN_RM_IN_PROGRESS(pi) || PLT_INPROG_PHY(pi)))
+	if (!(SCAN_RM_IN_PROGRESS(pi) || PLT_INPROG_PHY(pi) ||
+	      PS_ASLEEP_PHY(pi)))
 		wlc_phy_noise_sample_request((struct brcms_phy_pub *) pi,
 					     PHY_NOISE_SAMPLE_MON,
 					     CHSPEC_CHANNEL(pi->

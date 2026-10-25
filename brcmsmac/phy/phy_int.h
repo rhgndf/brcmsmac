@@ -229,6 +229,9 @@ enum phy_cal_mode {
 #define PUB_NOT_ASSOC(pi) \
 	(mboolisset(pi->measure_hold, PHY_HOLD_FOR_NOT_ASSOC))
 
+#define PS_ASLEEP_PHY(pi) \
+	(mboolisset(pi->measure_hold, PHY_HOLD_FOR_PS))
+
 struct phy_table_info {
 	uint table;
 	int q;

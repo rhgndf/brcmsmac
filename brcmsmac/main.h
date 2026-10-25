@@ -414,6 +414,10 @@ struct brcms_hardware {
  * _rifs: enable per-packet rifs.
  * bcn_li_bcn: beacon listen interval in # beacons.
  * bcn_li_dtim: beacon listen interval in # dtims.
+ * ps: power save is on (IEEE80211_CONF_PS).
+ * hps: frames to the AP are sent with the PM bit set.
+ * ps_tbtt: a beacon has checked the TBTT timer since power save started.
+ * ps_poll: a PS-Poll waits for its response.
  * WDarmed: watchdog timer is armed.
  * WDlast: last time wlc_watchdog() was called.
  * edcf_txop[IEEE80211_NUM_ACS]: current txop for each ac.
@@ -509,6 +513,10 @@ struct brcms_c_info {
 	/* AP-STA synchronization, power save */
 	u8 bcn_li_bcn;
 	u8 bcn_li_dtim;
+	bool ps;
+	bool hps;
+	bool ps_tbtt;
+	bool ps_poll;
 
 	bool WDarmed;
 	u32 WDlast;
