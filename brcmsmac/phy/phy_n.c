@@ -23363,6 +23363,12 @@ wlc_phy_rssi_compute_nphy(struct brcms_phy *pi, struct d11rxhdr *rxh)
 		rxpwr1 = phyRx2_l;
 	}
 
+	/* the power byte of a disabled core is not valid */
+	if (pi->sh->phyrxchain == 0x1)
+		rxpwr1 = rxpwr0;
+	else if (pi->sh->phyrxchain == 0x2)
+		rxpwr0 = rxpwr1;
+
 	if (pi->sh->rssi_mode == RSSI_ANT_MERGE_MAX)
 		rxpwr = (rxpwr0 > rxpwr1) ? rxpwr0 : rxpwr1;
 	else if (pi->sh->rssi_mode == RSSI_ANT_MERGE_MIN)

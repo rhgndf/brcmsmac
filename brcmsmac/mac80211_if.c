@@ -28,6 +28,7 @@
 #include <net/mac80211.h>
 #include <defs.h>
 #include "phy/phy_int.h"
+#include "phy/phy_hal.h"
 #include "d11.h"
 #include "channel.h"
 #include "scb.h"
@@ -35,6 +36,7 @@
 #include "ucode_loader.h"
 #include "mac80211_if.h"
 #include "main.h"
+#include "stf.h"
 #include "debug.h"
 #include "led.h"
 
@@ -1072,6 +1074,58 @@ static int brcms_ops_get_survey(struct ieee80211_hw *hw, int idx,
 	return 0;
 }
 
+static int brcms_ops_set_antenna(struct ieee80211_hw *hw, int radio_idx,
+				 u32 tx_ant, u32 rx_ant)
+{
+	struct brcms_info *wl = hw->priv;
+	struct brcms_c_info *wlc = wl->wlc;
+	enum nl80211_band b;
+	int err;
+
+	if (!tx_ant || !rx_ant)
+		return -EINVAL;
+
+	spin_lock_bh(&wl->lock);
+	/* brcms_c_tempsense_upd() turns TX chains back on up to hw_txchain */
+	wlc->stf->hw_txchain = tx_ant;
+	err = brcms_c_stf_txchain_set(wlc, tx_ant, true);
+	wlc->stf->rxchain = rx_ant;
+	wlc->stf->rxstreams = hweight8(rx_ant);
+	wlc_phy_stf_chain_set(wlc->band->pi, wlc->stf->txchain,
+			      wlc->stf->rxchain);
+	spin_unlock_bh(&wl->lock);
+	if (err)
+		return err;
+
+	for (b = NL80211_BAND_2GHZ; b <= NL80211_BAND_5GHZ; b++) {
+		struct ieee80211_sta_ht_cap *ht_cap;
+
+		if (!hw->wiphy->bands[b])
+			continue;
+		ht_cap = &hw->wiphy->bands[b]->ht_cap;
+		ht_cap->mcs.rx_mask[1] = wlc->stf->rxstreams > 1 ? 0xff : 0;
+		ht_cap->mcs.tx_params = IEEE80211_HT_MCS_TX_DEFINED;
+		if (wlc->stf->txstreams != wlc->stf->rxstreams)
+			ht_cap->mcs.tx_params |= IEEE80211_HT_MCS_TX_RX_DIFF |
+				(wlc->stf->txstreams - 1) <<
+				IEEE80211_HT_MCS_TX_MAX_STREAMS_SHIFT;
+		ht_cap->cap &= ~IEEE80211_HT_CAP_TX_STBC;
+		if (BRCMS_STBC_CAP_PHY(wlc) && wlc->stf->txstreams > 1)
+			ht_cap->cap |= IEEE80211_HT_CAP_TX_STBC;
+	}
+	return 0;
+}
+
+static int brcms_ops_get_antenna(struct ieee80211_hw *hw, int radio_idx,
+				 u32 *tx_ant, u32 *rx_ant)
+{
+	struct brcms_info *wl = hw->priv;
+
+	*tx_ant = wl->wlc->stf->hw_txchain;
+	*rx_ant = wl->wlc->stf->rxchain;
+	return 0;
+}
+
 static const struct ieee80211_ops brcms_ops = {
 	.add_chanctx = ieee80211_emulate_add_chanctx,
 	.remove_chanctx = ieee80211_emulate_remove_chanctx,
@@ -1098,6 +1152,8 @@ static const struct ieee80211_ops brcms_ops = {
 	.set_tsf = brcms_ops_set_tsf,
 	.set_tim = brcms_ops_beacon_set_tim,
 	.get_survey = brcms_ops_get_survey,
+	.set_antenna = brcms_ops_set_antenna,
+	.get_antenna = brcms_ops_get_antenna,
 };
 
 void brcms_dpc(struct tasklet_struct *t)
@@ -1244,6 +1300,12 @@ static int ieee_hw_init(struct ieee80211_hw *hw)
 		ieee80211_hw_set(hw, SUPPORTS_PS);
 		ieee80211_hw_set(hw, PS_NULLFUNC_STACK);
 		hw->wiphy->flags &= ~WIPHY_FLAG_PS_ON_BY_DEFAULT;
+	}
+
+	/* TODO: antenna control only verified on BCM43227 (core revision 30) */
+	if (D11REV_IS(wl->pub->corerev, 30)) {
+		hw->wiphy->available_antennas_tx = wl->wlc->stf->hw_txchain;
+		hw->wiphy->available_antennas_rx = wl->wlc->stf->hw_rxchain;
 	}
 
 	hw->extra_tx_headroom = brcms_c_get_header_len();
