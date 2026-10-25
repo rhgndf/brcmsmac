@@ -6974,6 +6974,9 @@ prep_mac80211_status(struct brcms_c_info *wlc, struct d11rxhdr *rxh,
 		ieee80211_channel_to_frequency(channel, rx_status->band);
 
 	rx_status->signal = wlc_phy_rssi_compute(wlc->hw->band->pi, rxh);
+	/* of an A-MPDU, only the last MPDU comes with PHY status */
+	if (!(rxh->RxStatus2 & RXS_PHYRXST_VALID))
+		rx_status->flag |= RX_FLAG_NO_SIGNAL_VAL;
 
 	/* noise */
 	/* qual */
