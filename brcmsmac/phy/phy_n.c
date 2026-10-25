@@ -21317,6 +21317,37 @@ wlc_phy_chanspec_radio2057_setup(
 	wlc_phy_radio205x_vcocal_nphy(pi);
 }
 
+static void wlc_phy_rxfilt_setup_nphy_rev16(struct brcms_phy *pi, u16 channel)
+{
+	static const u16 rxfilt_regs[] = {
+		0x267, 0x268, 0x269, 0x26c, 0x26d, 0x26e,
+		0x26a, 0x26b, 0x26f, 0x270
+	};
+	static const u16 rxfilt[] = {
+		0x00cc, 0x0029, 0x00cc, 0x0066, 0x0093, 0x0066,
+		0xfe58, 0x01a2, 0xfdc6, 0x00e1
+	};
+	static const u16 rxfilt_ch13[] = {
+		0x00e5, 0x0068, 0x00e5, 0x0073, 0x00b2, 0x0073,
+		0xfebe, 0x019e, 0xfdfe, 0x00cc
+	};
+	const u16 *vals = (channel == 13) ? rxfilt_ch13 : rxfilt;
+	u32 noisevar = (channel == 13) ? 0x18d : 0x14d;
+	u16 thresh = (channel == 13) ? 0x55 : 0x3c;
+	int i;
+
+	wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_NOISEVAR, 1, 0x33, 32,
+				 &noisevar);
+	wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_NOISEVAR, 1, 0x35, 32,
+				 &noisevar);
+
+	write_phy_reg(pi, 0x27b, thresh);
+	write_phy_reg(pi, 0x27c, thresh);
+
+	for (i = 0; i < ARRAY_SIZE(rxfilt_regs); i++)
+		write_phy_reg(pi, rxfilt_regs[i], vals[i]);
+}
+
 static void
 wlc_phy_chanspec_nphy_setup(struct brcms_phy *pi, u16 chanspec,
 			    const struct nphy_sfo_cfg *ci)
@@ -21447,8 +21478,12 @@ wlc_phy_chanspec_nphy_setup(struct brcms_phy *pi, u16 chanspec,
 		pi->phy_isspuravoid = (spuravoid > 0);
 	}
 
-	if (NREV_LT(pi->pubpi.phy_rev, 7))
+	if (NREV_LT(pi->pubpi.phy_rev, 7) || NREV_GE(pi->pubpi.phy_rev, 16))
 		write_phy_reg(pi, 0x17e, 0x3830);
+
+	if (NREV_GE(pi->pubpi.phy_rev, 16) && CHSPEC_IS2G(chanspec) &&
+	    CHSPEC_IS20(chanspec))
+		wlc_phy_rxfilt_setup_nphy_rev16(pi, CHSPEC_CHANNEL(chanspec));
 
 	wlc_phy_spurwar_nphy(pi);
 }
