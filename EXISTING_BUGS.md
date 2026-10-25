@@ -98,3 +98,32 @@ Not seen on the BCM43227. It is reachable whenever one of the two
 warnings fires.
 
 **Fix:** clear `init_in_progress` on the early returns.
+
+## A-MPDU frames at a legacy rate are aggregated at that rate
+
+When the bitrate mask leaves no MCS for the band (for example
+`iw dev wlan0 set bitrates legacy-2.4 1 ht-mcs-2.4`), rate control gives
+QoS data for an HT peer a CCK or OFDM rate, but mac80211 still marks it
+`IEEE80211_TX_CTL_AMPDU` while a Block Ack session runs. brcmsmac does
+not look at the rate: `dma_txfast()` (`brcmsmac/dma.c:1395`) passes every
+such frame to `brcms_c_ampdu_add_frame()`, which aggregates it at the
+legacy rate. That function also reads the MCS from the legacy PLCP and
+uses it to index `max_txlen[]`, `mcs2ampdu_table[]` and `mcs_table[]`
+(`brcmsmac/ampdu.c:555-573`, and `735` in `brcms_c_ampdu_finalize()`).
+These tables have 33 entries, and an OFDM or 11 Mbit/s CCK PLCP byte
+reads past them.
+
+On a BCM43227 (firmware 832.127) associated to an HT20 or HT40 access
+point, with the mask at 1 or 11 Mbit/s, no ping was answered (0 of 20)
+while the Block Ack session ran. Each aggregate ended in a PHY error
+(`TxStatus 0x161`, `PHYTxStatus 0x01`) followed by a BAR. Right after
+the session was stopped through mac80211's `agg_status`, frames went out
+alone at the CCK rate and were acknowledged until minstrel_ht started a
+new session. The port commit (`800781c`) behaves the same.
+
+Reachable on every device, but only with a bitrate mask without MCS
+rates. Otherwise minstrel_ht picks only MCS rates for HT peers, because
+brcmsmac does not set `SUPPORTS_HT_CCK_RATES`.
+
+**Fix:** send frames whose primary rate is not an MCS outside an A-MPDU,
+as ath9k does (`ath_lookup_rate()`, `ath_lookup_legacy()`).
