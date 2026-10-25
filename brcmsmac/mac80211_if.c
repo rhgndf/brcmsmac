@@ -864,12 +864,14 @@ brcms_ops_ampdu_action(struct ieee80211_hw *hw,
 		 * BA window size from ADDBA response ('buf_size') defines how
 		 * many outstanding MPDUs are allowed for the BA stream by
 		 * recipient and traffic class (this is actually unused by the
-		 * rest of the driver). 'ampdu_factor' gives maximum AMPDU size.
+		 * rest of the driver). 'ampdu_factor' gives maximum AMPDU size
+		 * and 'ampdu_density' the minimum MPDU start spacing.
 		 */
 		spin_lock_bh(&wl->lock);
 		brcms_c_ampdu_tx_operational(wl->wlc, tid,
 			(1 << (IEEE80211_HT_MAX_AMPDU_FACTOR +
-			 sta->deflink.ht_cap.ampdu_factor)) - 1);
+			 sta->deflink.ht_cap.ampdu_factor)) - 1,
+			sta->deflink.ht_cap.ampdu_density);
 		spin_unlock_bh(&wl->lock);
 		/* Power save wakeup */
 		break;

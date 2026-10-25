@@ -450,7 +450,7 @@ static int brcms_c_ffpld_check_txfunfl(struct brcms_c_info *wlc, int fid)
 
 void
 brcms_c_ampdu_tx_operational(struct brcms_c_info *wlc, u8 tid,
-	uint max_rx_ampdu_bytes) /* from ht_cap in beacon */
+	uint max_rx_ampdu_bytes, u8 mpdu_density) /* from peer's ht_cap */
 {
 	struct scb_ampdu *scb_ampdu;
 	struct ampdu_info *ampdu = wlc->ampdu;
@@ -464,6 +464,33 @@ brcms_c_ampdu_tx_operational(struct brcms_c_info *wlc, u8 tid,
 	}
 
 	scb_ampdu->max_rx_ampdu_bytes = max_rx_ampdu_bytes;
+	scb_ampdu->mpdu_density = mpdu_density;
+}
+
+/*
+ * Number of null delimiters to follow an MPDU of phylen bytes sent with plcp,
+ * so that the next MPDU starts no earlier than the peer's minimum MPDU start
+ * spacing. Density x means 2^(x-3) us and the rate is in kbps, so the
+ * spacing in bytes is rate * 2^x / 64000. Each MPDU is preceded by its
+ * 4-byte delimiter and padded to 4 bytes.
+ */
+static u8 brcms_c_ampdu_null_delim_cnt(struct brcms_c_info *wlc, u8 *plcp,
+				       int phylen)
+{
+	u8 density = wlc->pri_scb.scb_ampdu.mpdu_density;
+	uint rate, spacing, start;
+
+	if (!density)
+		return 0;
+
+	rate = mcs_2_rate(plcp[0] & MIMO_PLCP_MCS_MASK,
+			  plcp[0] & MIMO_PLCP_40MHZ, plcp3_issgi(plcp[3]));
+	spacing = DIV_ROUND_UP(rate << density, 64000);
+	start = AMPDU_DELIMITER_LEN + roundup(phylen, 4);
+	if (spacing <= start)
+		return 0;
+
+	return DIV_ROUND_UP(spacing - start, AMPDU_DELIMITER_LEN);
 }
 
 void brcms_c_ampdu_reset_session(struct brcms_ampdu_session *session,
@@ -500,11 +527,15 @@ int brcms_c_ampdu_add_frame(struct brcms_ampdu_session *session,
 	bool fbr_iscck;
 	bool rr;
 
-	ndelim = txh->RTSPLCPFallback[AMPDU_FBR_NULL_DELIM];
 	plcp = (u8 *)(txh + 1);
 	fbr_iscck = !(le16_to_cpu(txh->XtraFrameTypes) & 0x03);
 	len = fbr_iscck ? BRCMS_GET_CCK_PLCP_LEN(txh->FragPLCPFallback) :
 			  BRCMS_GET_MIMO_PLCP_LEN(txh->FragPLCPFallback);
+	/* finalizing removed them if a retried frame was the last MPDU */
+	ndelim = 0;
+	if (txrate[0].flags & IEEE80211_TX_RC_MCS)
+		ndelim = brcms_c_ampdu_null_delim_cnt(wlc, plcp, len);
+	txh->RTSPLCPFallback[AMPDU_FBR_NULL_DELIM] = ndelim;
 	len = roundup(len, 4) + (ndelim + 1) * AMPDU_DELIMITER_LEN;
 
 	ampdu_frames = skb_queue_len(&session->skb_list);

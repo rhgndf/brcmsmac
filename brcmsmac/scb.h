@@ -44,6 +44,7 @@ struct scb_ampdu {
 	u8 max_pdu;		/* max pdus allowed in ampdu */
 	u8 release;		/* # of mpdus released at a time */
 	u32 max_rx_ampdu_bytes;	/* max ampdu rcv length; 8k, 16k, 32k, 64k */
+	u8 mpdu_density;	/* min mpdu start spacing, 1-7 ==> 2^(x-3) us */
 
 	/*
 	 * This could easily be a ini[] pointer and we keep this info in wl

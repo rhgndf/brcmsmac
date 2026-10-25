@@ -6588,14 +6588,6 @@ brcms_c_d11hdrs_mac80211(struct brcms_c_info *wlc, struct ieee80211_hw *hw,
 		txh->RTSDurFallback = 0;
 	}
 
-#ifdef SUPPORT_40MHZ
-	/* add null delimiter count */
-	if ((tx_info->flags & IEEE80211_TX_CTL_AMPDU) && is_mcs_rate(rspec))
-		txh->RTSPLCPFallback[AMPDU_FBR_NULL_DELIM] =
-		   brcm_c_ampdu_null_delim_cnt(wlc->ampdu, scb, rspec, phylen);
-
-#endif
-
 	/*
 	 * Now that RTS/RTS FB preamble types are updated, write
 	 * the final value
