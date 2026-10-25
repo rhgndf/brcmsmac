@@ -21499,9 +21499,23 @@ wlc_phy_chanspec_nphy_setup(struct brcms_phy *pi, u16 chanspec,
 		wlc_phy_rxfilt_setup_nphy_rev16(pi, chanspec);
 
 	/* TODO: only verified on BCM43227 (core revision 30) */
-	if (NREV_GE(pi->pubpi.phy_rev, 16))
+	if (NREV_GE(pi->pubpi.phy_rev, 16)) {
+		static const u32 min_nvar20[] = {
+			0x14, 0x14, 0x14, 0x14, 0x15, 0x0d, 0x05, 0x05,
+			0x14, 0x14, 0x10, 0x10, 0x05, 0x05, 0x05, 0x05
+		};
+		static const u32 min_nvar40[] = {
+			0x14, 0x20, 0x1d, 0x19, 0x15, 0x0d, 0x05, 0x05,
+			0x14, 0x14, 0x10, 0x10, 0x05, 0x05, 0x05, 0x01
+		};
+
 		mod_phy_reg(pi, 0x324, 0x100,
 			    CHSPEC_IS40(chanspec) ? 0x100 : 0);
+		wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_NOISEVAR,
+					 ARRAY_SIZE(min_nvar20), 256, 32,
+					 CHSPEC_IS40(chanspec) ?
+					 min_nvar40 : min_nvar20);
+	}
 
 	wlc_phy_spurwar_nphy(pi);
 
