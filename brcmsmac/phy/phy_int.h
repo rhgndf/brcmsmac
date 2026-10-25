@@ -925,7 +925,7 @@ u8 wlc_phy_nbits(s32 value);
 void wlc_phy_compute_dB(u32 *cmplx_pwr, s8 *p_dB, u8 core);
 
 uint wlc_phy_init_radio_regs_allbands(struct brcms_phy *pi,
-				      struct radio_20xx_regs *radioregs);
+				      const struct radio_20xx_regs *radioregs);
 uint wlc_phy_init_radio_regs(struct brcms_phy *pi,
 			     const struct radio_regs *radioregs,
 			     u16 core_offset);

@@ -11418,7 +11418,7 @@ static const struct radio_regs regs_RX_2056_rev11[] = {
 	{0xFFFF, 0, 0, 0, 0},
 };
 
-static struct radio_20xx_regs regs_2057_rev4[] = {
+static const struct radio_20xx_regs regs_2057_rev4[] = {
 	{0x00, 0x84, 0},
 	{0x01, 0, 0},
 	{0x02, 0x60, 0},
@@ -11808,7 +11808,7 @@ static struct radio_20xx_regs regs_2057_rev4[] = {
 	{0xFFFF, 0, 0},
 };
 
-static struct radio_20xx_regs regs_2057_rev5[] = {
+static const struct radio_20xx_regs regs_2057_rev5[] = {
 	{0x00, 0, 1},
 	{0x01, 0x57, 1},
 	{0x02, 0x20, 1},
@@ -12140,7 +12140,7 @@ static struct radio_20xx_regs regs_2057_rev5[] = {
 	{0xFFFF, 0, 0}
 };
 
-static struct radio_20xx_regs regs_2057_rev5v1[] = {
+static const struct radio_20xx_regs regs_2057_rev5v1[] = {
 	{0x00, 0x15, 1},
 	{0x01, 0x57, 1},
 	{0x02, 0x20, 1},
@@ -12472,7 +12472,7 @@ static struct radio_20xx_regs regs_2057_rev5v1[] = {
 	{0xFFFF, 0, 0}
 };
 
-static struct radio_20xx_regs regs_2057_rev7[] = {
+static const struct radio_20xx_regs regs_2057_rev7[] = {
 	{0x00, 0, 1},
 	{0x01, 0x57, 1},
 	{0x02, 0x20, 1},
@@ -12888,7 +12888,7 @@ static struct radio_20xx_regs regs_2057_rev7[] = {
 	{0xFFFF, 0, 0}
 };
 
-static struct radio_20xx_regs regs_2057_rev8[] = {
+static const struct radio_20xx_regs regs_2057_rev8[] = {
 	{0x00, 0x8, 1},
 	{0x01, 0x57, 1},
 	{0x02, 0x20, 1},
@@ -19735,7 +19735,7 @@ static void wlc_phy_radio_preinit_205x(struct brcms_phy *pi)
 
 static void wlc_phy_radio_init_2057(struct brcms_phy *pi)
 {
-	struct radio_20xx_regs *regs_2057_ptr = NULL;
+	const struct radio_20xx_regs *regs_2057_ptr = NULL;
 
 	if (NREV_IS(pi->pubpi.phy_rev, 7)) {
 		regs_2057_ptr = regs_2057_rev4;

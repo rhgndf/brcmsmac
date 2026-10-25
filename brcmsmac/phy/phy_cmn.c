@@ -896,7 +896,7 @@ wlc_phy_read_table(struct brcms_phy *pi, const struct phytbl_info *ptbl_info,
 
 uint
 wlc_phy_init_radio_regs_allbands(struct brcms_phy *pi,
-				 struct radio_20xx_regs *radioregs)
+				 const struct radio_20xx_regs *radioregs)
 {
 	uint i = 0;
 
