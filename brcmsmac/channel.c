@@ -516,12 +516,12 @@ brcms_c_channel_reg_limits(struct brcms_cm_info *wlc_cm, u16 chanspec,
 
 	/* Fill in the MCS 8-15 SDM rates */
 	for (i = 0; i < BRCMS_NUM_RATES_MCS_2_STREAM; i++) {
-		txpwr->mcs_20_mimo[i] = (u8) maxpwr20;
-		txpwr->mcs_40_mimo[i] = (u8) maxpwr40;
+		txpwr->mcs_20_mimo[i] = txpwr->mcs_20_cdd[i];
+		txpwr->mcs_40_mimo[i] = txpwr->mcs_40_cdd[i];
 	}
 
 	/* Fill in MCS32 */
-	txpwr->mcs32 = (u8) maxpwr40;
+	txpwr->mcs32 = txpwr->mcs_40_cdd[0];
 
 	for (i = 0, j = 0; i < BRCMS_NUM_RATES_OFDM; i++, j++) {
 		if (txpwr->ofdm_40_cdd[i] == 0)
