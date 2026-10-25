@@ -3314,6 +3314,14 @@ static void brcms_b_coreinit(struct brcms_c_info *wlc)
 	bcma_mask16(core, D11REGOFFS(ifs_ctl), 0x0FFF);
 	bcma_write16(core, D11REGOFFS(ifs_aifsn), EDCF_AIFSN_MIN);
 
+	if (D11REV_IS(wlc_hw->corerev, 30)) {
+		u16 ifs_ctl1 = bcma_read16(core, D11REGOFFS(ifs_ctl1)) |
+			       IFS_CTL1_EDCRS;
+
+		brcms_b_write_shm(wlc_hw, M_IFS_CTL1, ifs_ctl1);
+		bcma_write16(core, D11REGOFFS(ifs_ctl1), ifs_ctl1);
+	}
+
 	/* init the tx dma engines */
 	for (i = 0; i < NFIFO; i++) {
 		if (wlc_hw->di[i])

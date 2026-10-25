@@ -1169,6 +1169,9 @@ struct tx_status {
 #define M_NOISE_IF_COUNT	(0x034 * 2)
 #define M_NOISE_IF_TIMEOUT	(0x035 * 2)
 
+/* IFS ctl1 value restored by the ucode */
+#define	M_IFS_CTL1		(0x02d * 2)
+
 #define	M_RF_RX_SP_REG1		(0x036 * 2)
 
 /* TSSI for last 4 11g OFDM packets transmitted */
