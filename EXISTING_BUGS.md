@@ -51,6 +51,11 @@ of a beacon it listens for, and misses that beacon. The power save
 commit stops requesting the sample while the microcode sleeps, because
 power save depends on those beacons; the cost while awake remains.
 
+wl requests the sample too, mostly 1.02 s apart (450 requests in 361 s
+of the `wl-percal-ch6-13-01` trace), and in monitor mode it missed
+single beacons 28 times in 30 s, as brcmsmac did 27 times. wl may use
+the result, though; brcmsmac does not.
+
 Reachable on every N-PHY and LCN-PHY device whenever the interface is
 up.
 
