@@ -490,7 +490,8 @@ static u8 brcms_c_ampdu_null_delim_cnt(struct brcms_c_info *wlc, u8 *plcp,
 	if (spacing <= start)
 		return 0;
 
-	return DIV_ROUND_UP(spacing - start, AMPDU_DELIMITER_LEN);
+	/* the hardware sends at most 63 */
+	return min(DIV_ROUND_UP(spacing - start, AMPDU_DELIMITER_LEN), 63U);
 }
 
 void brcms_c_ampdu_reset_session(struct brcms_ampdu_session *session,

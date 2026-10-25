@@ -573,9 +573,9 @@ static int brcms_ops_config(struct ieee80211_hw *hw, int radio_idx,
 	}
 	if (changed & IEEE80211_CONF_CHANGE_CHANNEL) {
 		if (conf->chandef.width == NL80211_CHAN_WIDTH_20 ||
-		    conf->chandef.width == NL80211_CHAN_WIDTH_20_NOHT)
-			err = brcms_c_set_channel(wl->wlc,
-						  conf->chandef.chan->hw_value);
+		    conf->chandef.width == NL80211_CHAN_WIDTH_20_NOHT ||
+		    conf->chandef.width == NL80211_CHAN_WIDTH_40)
+			err = brcms_c_set_channel(wl->wlc, &conf->chandef);
 		else
 			err = -ENOTSUPP;
 	}
@@ -1164,6 +1164,12 @@ static int ieee_hw_rate_init(struct ieee80211_hw *hw)
 			return -EPERM;
 		}
 	}
+
+	/* 40 MHz channels are only verified on BCM43227 (core revision 30). */
+	if (D11REV_IS(wl->pub->corerev, 30))
+		hw->wiphy->bands[NL80211_BAND_2GHZ]->ht_cap.cap |=
+			IEEE80211_HT_CAP_SUP_WIDTH_20_40 |
+			IEEE80211_HT_CAP_DSSSCCK40;
 
 	/* TODO: 4 us MPDU spacing only verified on BCM43227 (core revision 30) */
 	if (D11REV_IS(wl->pub->corerev, 30))

@@ -423,6 +423,22 @@ static int brcms_chspec_bw(u16 chanspec)
 	return BRCMS_10_MHZ;
 }
 
+static u16 brcms_c_chandef_chspec(const struct cfg80211_chan_def *chandef)
+{
+	u16 channel = chandef->chan->hw_value;
+	u16 center;
+
+	if (chandef->width != NL80211_CHAN_WIDTH_40)
+		return ch20mhz_chspec(channel);
+
+	center = ieee80211_frequency_to_channel(chandef->center_freq1);
+	return center | WL_CHANSPEC_BW_40 |
+	       (center > channel ? WL_CHANSPEC_CTL_SB_LOWER :
+				   WL_CHANSPEC_CTL_SB_UPPER) |
+	       (center <= CH_MAX_2G_CHANNEL ? WL_CHANSPEC_BAND_2G :
+					      WL_CHANSPEC_BAND_5G);
+}
+
 static void brcms_c_detach_mfree(struct brcms_c_info *wlc)
 {
 	if (wlc == NULL)
@@ -5111,7 +5127,7 @@ static void brcms_c_wme_retries_write(struct brcms_c_info *wlc)
 /* make interface operational */
 int brcms_c_up(struct brcms_c_info *wlc)
 {
-	struct ieee80211_channel *ch;
+	const struct cfg80211_chan_def *chandef;
 
 	brcms_dbg_info(wlc->hw->d11core, "wl%d\n", wlc->pub->unit);
 
@@ -5179,9 +5195,9 @@ int brcms_c_up(struct brcms_c_info *wlc)
 	wlc->pub->up = true;
 
 	if (wlc->bandinit_pending) {
-		ch = wlc->pub->ieee_hw->conf.chandef.chan;
+		chandef = &wlc->pub->ieee_hw->conf.chandef;
 		brcms_c_suspend_mac_and_wait(wlc);
-		brcms_c_set_chanspec(wlc, ch20mhz_chspec(ch->hw_value));
+		brcms_c_set_chanspec(wlc, brcms_c_chandef_chspec(chandef));
 		wlc->bandinit_pending = false;
 		brcms_c_enable_mac(wlc);
 	}
@@ -5491,11 +5507,12 @@ static void brcms_c_ofdm_rateset_war(struct brcms_c_info *wlc)
 	wlc_phy_ofdm_rateset_war(wlc->band->pi, false);
 }
 
-int brcms_c_set_channel(struct brcms_c_info *wlc, u16 channel)
+int brcms_c_set_channel(struct brcms_c_info *wlc,
+			const struct cfg80211_chan_def *chandef)
 {
-	u16 chspec = ch20mhz_chspec(channel);
+	u16 chspec = brcms_c_chandef_chspec(chandef);
 
-	if (channel > MAXCHANNEL)
+	if (chandef->chan->hw_value > MAXCHANNEL)
 		return -EINVAL;
 
 	if (!brcms_c_valid_chanspec_db(wlc->cmi, chspec))
@@ -6562,7 +6579,8 @@ brcms_c_d11hdrs_mac80211(struct brcms_c_info *wlc, struct ieee80211_hw *hw,
 					} else if (wlc->mimo_40txbw != AUTO)
 						mimo_txbw = wlc->mimo_40txbw;
 					/* else check if dst is using 40 Mhz */
-					else if (scb->flags & SCB_IS40)
+					else if (txrate[k]->flags &
+						 IEEE80211_TX_RC_40_MHZ_WIDTH)
 						mimo_txbw = PHY_TXC1_BW_40MHZ;
 				} else if (is_ofdm_rate(rspec[k])) {
 					if (wlc->ofdm_40txbw != AUTO)
@@ -7244,6 +7262,10 @@ prep_mac80211_status(struct brcms_c_info *wlc, struct d11rxhdr *rxh,
 	rx_status->flag |= RX_FLAG_MACTIME_START;
 
 	channel = BRCMS_CHAN_CHANNEL(rxh->RxChan);
+	/* on a 40 MHz channel, the microcode gives the centre channel */
+	if ((rxh->RxChan & RXS_CHAN_40) && CHSPEC_IS40(wlc->chanspec))
+		channel = CHSPEC_SB_UPPER(wlc->chanspec) ?
+			  upper_20_sb(channel) : lower_20_sb(channel);
 
 	rx_status->band =
 		channel > 14 ? NL80211_BAND_5GHZ : NL80211_BAND_2GHZ;
@@ -8132,12 +8154,11 @@ bool brcms_c_dpc(struct brcms_c_info *wlc, bool bounded)
 void brcms_c_init(struct brcms_c_info *wlc, bool mute_tx)
 {
 	struct bcma_device *core = wlc->hw->d11core;
-	struct ieee80211_channel *ch = wlc->pub->ieee_hw->conf.chandef.chan;
 	u16 chanspec;
 
 	brcms_dbg_info(core, "wl%d\n", wlc->pub->unit);
 
-	chanspec = ch20mhz_chspec(ch->hw_value);
+	chanspec = brcms_c_chandef_chspec(&wlc->pub->ieee_hw->conf.chandef);
 
 	brcms_b_init(wlc->hw, chanspec);
 	brcms_c_key_init(wlc);
@@ -8371,7 +8392,10 @@ brcms_c_attach(struct brcms_info *wl, struct bcma_device *core, uint unit,
 	wlc->mimo_40txbw = AUTO;
 	wlc->ofdm_40txbw = AUTO;
 	wlc->cck_40txbw = AUTO;
-	brcms_c_update_mimo_band_bwcap(wlc, BRCMS_N_BW_20IN2G_40IN5G);
+	/* TODO: HT40 only verified on BCM43227 (core revision 30) */
+	brcms_c_update_mimo_band_bwcap(wlc, D11REV_IS(wlc->pub->corerev, 30) ?
+				       BRCMS_N_BW_40ALL :
+				       BRCMS_N_BW_20IN2G_40IN5G);
 
 	/* Set default values of SGI */
 	if (BRCMS_SGI_CAP_PHY(wlc)) {

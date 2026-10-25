@@ -265,6 +265,8 @@ struct brcms_antselcfg {
 	u8 num_antcfg;	/* number of available antenna configurations */
 };
 
+struct cfg80211_chan_def;
+
 /* common functions for every port */
 struct brcms_c_info *brcms_c_attach(struct brcms_info *wl,
 				    struct bcma_device *core, uint unit,
@@ -309,7 +311,8 @@ void brcms_c_associate_upd(struct brcms_c_info *wlc, bool state);
 void brcms_c_scan_start(struct brcms_c_info *wlc);
 void brcms_c_scan_stop(struct brcms_c_info *wlc);
 int brcms_c_get_curband(struct brcms_c_info *wlc);
-int brcms_c_set_channel(struct brcms_c_info *wlc, u16 channel);
+int brcms_c_set_channel(struct brcms_c_info *wlc,
+			const struct cfg80211_chan_def *chandef);
 int brcms_c_set_rate_limit(struct brcms_c_info *wlc, u16 srl, u16 lrl);
 void brcms_c_get_current_rateset(struct brcms_c_info *wlc,
 				 struct brcm_rateset *currs);
