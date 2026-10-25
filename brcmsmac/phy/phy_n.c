@@ -15511,13 +15511,15 @@ static void wlc_phy_workarounds_nphy_gainctrl_2057_rev9(struct brcms_phy *pi)
 {
 	static const s8 lna1G_gain_db_2057rev9[] = { 9, 14, 18, 24 };
 	static const s8 lna2G_gain_db_2057rev9[] = { -2, 7, 11, 16 };
+	bool is40 = CHSPEC_IS40(pi->radio_chanspec);
+	u16 crsminpwr = is40 ? 0x53 : 0x50;
 
 	mod_phy_reg(pi, 0x1c, (0x1 << 13), (1 << 13));
 	mod_phy_reg(pi, 0x32, (0x1 << 13), (1 << 13));
 
-	mod_phy_reg(pi, 0x27d, (0xff << 0), (0x50 << 0));
-	mod_phy_reg(pi, 0x283, (0xff << 0), (0x50 << 0));
-	mod_phy_reg(pi, 0x280, (0xff << 0), (0x50 << 0));
+	mod_phy_reg(pi, 0x27d, (0xff << 0), (crsminpwr << 0));
+	mod_phy_reg(pi, 0x283, (0xff << 0), (crsminpwr << 0));
+	mod_phy_reg(pi, 0x280, (0xff << 0), (crsminpwr << 0));
 
 	write_phy_reg(pi, 0x37, 0x70);
 	write_phy_reg(pi, 0x2ad, 0x70);
@@ -15526,10 +15528,10 @@ static void wlc_phy_workarounds_nphy_gainctrl_2057_rev9(struct brcms_phy *pi)
 
 	write_phy_reg(pi, 0x169, 0x1f02);
 
-	write_phy_reg(pi, 0x24, 0x62);
-	write_phy_reg(pi, 0x2ab, 0x62);
-	write_phy_reg(pi, 0x36, 0x34);
-	write_phy_reg(pi, 0x2ac, 0x34);
+	write_phy_reg(pi, 0x24, is40 ? 0x6a : 0x62);
+	write_phy_reg(pi, 0x2ab, is40 ? 0x6a : 0x62);
+	write_phy_reg(pi, 0x36, is40 ? 0x4 : 0x34);
+	write_phy_reg(pi, 0x2ac, is40 ? 0x4 : 0x34);
 
 	wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_GAIN1, 4, 0x8, 8,
 				 lna1G_gain_db_2057rev9);
@@ -16280,7 +16282,8 @@ static void wlc_phy_workarounds_nphy_rev7(struct brcms_phy *pi)
 	}
 
 	if (NREV_GE(pi->pubpi.phy_rev, 16))
-		mod_phy_reg(pi, 0xbd, (0xff << 0), (160 << 0));
+		mod_phy_reg(pi, 0xbd, (0xff << 0),
+			    ((CHSPEC_IS40(pi->radio_chanspec) ? 100 : 160) << 0));
 	else if (NREV_GE(pi->pubpi.phy_rev, 8))
 		mod_phy_reg(pi, 0xbd, (0xff << 0), (114 << 0));
 
@@ -16450,7 +16453,8 @@ static void wlc_phy_workarounds_nphy_rev7(struct brcms_phy *pi)
 						 0x159 + coreNum * 0x10, 16,
 						 &rx2tx_lpf_rc_lut_tx40_11n);
 
-			if (pi->pubpi.radiorev == 9)
+			if ((pi->pubpi.radiorev == 9) &&
+			    CHSPEC_IS20(pi->radio_chanspec))
 				wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_RFSEQ,
 							 1, 0x158 + coreNum * 0x10,
 							 16,
@@ -21299,16 +21303,21 @@ wlc_phy_chanspec_radio2057_setup(
 		}
 
 		for (coreNum = 0; coreNum <= 1; coreNum++) {
+			u16 pad = pad2g_tune_pus;
+
+			/* 40 MHz: core 0 0x20 and core 1 0x10 below 20 MHz */
+			if ((pi->pubpi.radiorev == 9) && PHY_IPA(pi) &&
+			    CHSPEC_IS40(pi->radio_chanspec))
+				pad -= coreNum ? 0x10 : 0x20;
 
 			if (txmix2g_tune_boost_pu != 0)
 				WRITE_RADIO_REG4(pi, RADIO_2057, CORE, coreNum,
 						 TXMIX2G_TUNE_BOOST_PU,
 						 txmix2g_tune_boost_pu);
 
-			if (pad2g_tune_pus != 0)
+			if (pad != 0)
 				WRITE_RADIO_REG4(pi, RADIO_2057, CORE, coreNum,
-						 PAD2G_TUNE_PUS,
-						 pad2g_tune_pus);
+						 PAD2G_TUNE_PUS, pad);
 		}
 	}
 
@@ -21317,7 +21326,7 @@ wlc_phy_chanspec_radio2057_setup(
 	wlc_phy_radio205x_vcocal_nphy(pi);
 }
 
-static void wlc_phy_rxfilt_setup_nphy_rev16(struct brcms_phy *pi, u16 channel)
+static void wlc_phy_rxfilt_setup_nphy_rev16(struct brcms_phy *pi, u16 chanspec)
 {
 	static const u16 rxfilt_regs[] = {
 		0x267, 0x268, 0x269, 0x26c, 0x26d, 0x26e,
@@ -21331,6 +21340,7 @@ static void wlc_phy_rxfilt_setup_nphy_rev16(struct brcms_phy *pi, u16 channel)
 		0x00e5, 0x0068, 0x00e5, 0x0073, 0x00b2, 0x0073,
 		0xfebe, 0x019e, 0xfdfe, 0x00cc
 	};
+	u16 channel = CHSPEC_CHANNEL(chanspec);
 	const u16 *vals = (channel == 13) ? rxfilt_ch13 : rxfilt;
 	u32 noisevar = (channel == 13) ? 0x18d : 0x14d;
 	u16 thresh = (channel == 13) ? 0x55 : 0x3c;
@@ -21340,6 +21350,10 @@ static void wlc_phy_rxfilt_setup_nphy_rev16(struct brcms_phy *pi, u16 channel)
 				 &noisevar);
 	wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_NOISEVAR, 1, 0x35, 32,
 				 &noisevar);
+
+	/* At 40 MHz the reference driver keeps the RX filter as it is */
+	if (CHSPEC_IS40(chanspec))
+		return;
 
 	write_phy_reg(pi, 0x27b, thresh);
 	write_phy_reg(pi, 0x27c, thresh);
@@ -21481,9 +21495,8 @@ wlc_phy_chanspec_nphy_setup(struct brcms_phy *pi, u16 chanspec,
 	if (NREV_LT(pi->pubpi.phy_rev, 7) || NREV_GE(pi->pubpi.phy_rev, 16))
 		write_phy_reg(pi, 0x17e, 0x3830);
 
-	if (NREV_GE(pi->pubpi.phy_rev, 16) && CHSPEC_IS2G(chanspec) &&
-	    CHSPEC_IS20(chanspec))
-		wlc_phy_rxfilt_setup_nphy_rev16(pi, CHSPEC_CHANNEL(chanspec));
+	if (NREV_GE(pi->pubpi.phy_rev, 16) && CHSPEC_IS2G(chanspec))
+		wlc_phy_rxfilt_setup_nphy_rev16(pi, chanspec);
 
 	wlc_phy_spurwar_nphy(pi);
 }
