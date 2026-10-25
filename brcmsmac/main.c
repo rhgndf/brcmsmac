@@ -6808,6 +6808,10 @@ bool brcms_c_sendpkt_mac80211(struct brcms_c_info *wlc, struct sk_buff *sdu,
 	uint fifo;
 	struct scb *scb = &wlc->pri_scb;
 
+	/* only frames at an MCS rate can be aggregated */
+	if (!(IEEE80211_SKB_CB(sdu)->control.rates[0].flags &
+	      IEEE80211_TX_RC_MCS))
+		IEEE80211_SKB_CB(sdu)->flags &= ~IEEE80211_TX_CTL_AMPDU;
 	fifo = brcms_ac_to_fifo(skb_get_queue_mapping(sdu));
 	brcms_c_d11hdrs_mac80211(wlc, hw, sdu, scb, 0, 1, fifo, 0);
 	if (!brcms_c_tx(wlc, sdu))
