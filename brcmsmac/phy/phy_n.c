@@ -16544,6 +16544,11 @@ static void wlc_phy_workarounds_nphy_rev7(struct brcms_phy *pi)
 				 &aux_adc_gain_rev7);
 	wlc_phy_table_write_nphy(pi, NPHY_TBL_ID_AFECTRL, 4, 0x1c, 16,
 				 &aux_adc_gain_rev7);
+
+	/* TODO: only verified on BCM43227 (core revision 30) */
+	if (pi->sh->boardflags2 & BFL2_SINGLEANT_CCK)
+		wlapi_bmac_mhf(pi->sh->physhim, MHF4, MHF4_BPHY_TXCORE0,
+			       MHF4_BPHY_TXCORE0, BRCM_BAND_ALL);
 }
 
 static void wlc_phy_workarounds_nphy_rev3(struct brcms_phy *pi)
