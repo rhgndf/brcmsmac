@@ -850,6 +850,7 @@ brcms_c_ampdu_dotxstatus_complete(struct ampdu_info *ampdu, struct scb *scb,
 	u16 mimoantsel = 0;
 	u8 retry_limit;
 	struct ieee80211_tx_info *tx_info = IEEE80211_SKB_CB(p);
+	struct sk_buff *failed = NULL;
 
 #ifdef DEBUG
 	u8 hole[AMPDU_MAX_MPDU];
@@ -990,18 +991,23 @@ brcms_c_ampdu_dotxstatus_complete(struct ampdu_info *ampdu, struct scb *scb,
 				WARN_ONCE(ret, "queue %d out of txds\n", queue);
 			} else {
 				/* Retry timeout */
-				ieee80211_tx_info_clear_status(tx_info);
+				brcms_c_ampdu_rate_status(wlc, tx_info, txs,
+							  mcs);
+				/* keep the rate counts for rate control */
+				memset_after(&tx_info->status, 0, rates);
 				tx_info->status.ampdu_ack_len = 0;
 				tx_info->status.ampdu_len = 1;
-				tx_info->flags |=
-				    IEEE80211_TX_STAT_AMPDU_NO_BACK;
+				tx_info->flags |= IEEE80211_TX_STAT_AMPDU;
 				skb_pull(p, D11_PHY_HDR_LEN);
 				skb_pull(p, D11_TXH_LEN);
 				brcms_dbg_ht(wlc->hw->d11core,
 					     "BA Timeout, seq %d\n",
 					     seq);
-				ieee80211_tx_status_irqsafe(wlc->pub->ieee_hw,
-							    p);
+				/* only the last one asks for a BAR */
+				if (failed)
+					ieee80211_tx_status_irqsafe(wlc->pub->ieee_hw,
+								    failed);
+				failed = p;
 			}
 		}
 		tot_mpdu++;
@@ -1012,6 +1018,12 @@ brcms_c_ampdu_dotxstatus_complete(struct ampdu_info *ampdu, struct scb *scb,
 			break;
 
 		p = dma_getnexttxp(wlc->hw->di[queue], DMA_RANGE_TRANSMITTED);
+	}
+
+	if (failed) {
+		IEEE80211_SKB_CB(failed)->flags |=
+			IEEE80211_TX_STAT_AMPDU_NO_BACK;
+		ieee80211_tx_status_irqsafe(wlc->pub->ieee_hw, failed);
 	}
 
 	/* update rate state */
