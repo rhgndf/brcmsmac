@@ -912,6 +912,9 @@ brcms_c_dotxstatus(struct brcms_c_info *wlc, struct tx_status *txs)
 
 	tx_frame_count =
 	    (txs->status & TX_STATUS_FRM_RTX_MASK) >> TX_STATUS_FRM_RTX_SHIFT;
+	if (tx_frame_count)
+		wlc->ieee_stats.dot11ACKFailureCount += tx_frame_count -
+			!!(txs->status & TX_STATUS_ACK_RCV);
 
 	lastframe = !ieee80211_has_morefrags(h->frame_control);
 
@@ -3179,10 +3182,11 @@ static bool brcms_c_ps_allowed(struct brcms_c_info *wlc)
 	       wlc->bsscfg->type == BRCMS_TYPE_STATION;
 }
 
-static void brcms_c_statsupd(struct brcms_c_info *wlc)
+void brcms_c_statsupd(struct brcms_c_info *wlc)
 {
 	int i;
 	struct macstat *macstats;
+	u16 rxbadfcs, txrtsfrm, rxctsucast;
 #ifdef DEBUG
 	u16 delta;
 	u16 rxf0ovfl;
@@ -3204,9 +3208,21 @@ static void brcms_c_statsupd(struct brcms_c_info *wlc)
 		txfunfl[i] = macstats->txfunfl[i];
 #endif				/* DEBUG */
 
+	rxbadfcs = macstats->rxbadfcs;
+	txrtsfrm = macstats->txrtsfrm;
+	rxctsucast = macstats->rxctsucast;
+
 	/* Read mac stats from contiguous shared memory */
 	brcms_b_copyfrom_objmem(wlc->hw, M_UCODE_MACSTAT, macstats,
 				sizeof(*macstats), OBJADDR_SHM_SEL);
+
+	wlc->ieee_stats.dot11FCSErrorCount +=
+		(u16)(macstats->rxbadfcs - rxbadfcs);
+	wlc->ieee_stats.dot11RTSSuccessCount +=
+		(u16)(macstats->rxctsucast - rxctsucast);
+	wlc->ieee_stats.dot11RTSFailureCount +=
+		(u16)(macstats->txrtsfrm - txrtsfrm) -
+		(u16)(macstats->rxctsucast - rxctsucast);
 
 #ifdef DEBUG
 	/* check for rx fifo 0 overflow */

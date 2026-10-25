@@ -278,6 +278,7 @@ uint brcms_c_down(struct brcms_c_info *wlc);
 bool brcms_c_chipmatch(struct bcma_device *core);
 void brcms_c_init(struct brcms_c_info *wlc, bool mute_tx);
 void brcms_c_reset(struct brcms_c_info *wlc);
+void brcms_c_statsupd(struct brcms_c_info *wlc);
 
 void brcms_c_intrson(struct brcms_c_info *wlc);
 u32 brcms_c_intrsoff(struct brcms_c_info *wlc);

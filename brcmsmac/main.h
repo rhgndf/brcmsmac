@@ -18,6 +18,7 @@
 #define _BRCM_MAIN_H_
 
 #include <linux/etherdevice.h>
+#include <net/mac80211.h>
 
 #include <brcmu_utils.h>
 #include "types.h"
@@ -62,7 +63,7 @@
 		(((val) & (~(field ## _M << field ## _S))) | \
 		 ((unsigned)(bits) << field ## _S))
 
-#define	SW_TIMER_MAC_STAT_UPD		30	/* periodic MAC stats update */
+#define	SW_TIMER_MAC_STAT_UPD		5	/* periodic MAC stats update */
 
 /* max # supported core revisions (0 .. MAXCOREREV - 1) */
 #define	MAXCOREREV		31
@@ -458,6 +459,7 @@ struct brcms_hardware {
  * key_tbl: SHM address of the ucode's key table, 0 without hardware crypto.
  * keys: mac80211 key in each hardware key slot.
  * rx_amsdu: received A-MSDU being joined from its pieces.
+ * ieee_stats: mac80211 low-level statistics.
  */
 struct brcms_c_info {
 	struct brcms_pub *pub;
@@ -585,6 +587,7 @@ struct brcms_c_info {
 	struct ieee80211_key_conf *keys[WSEC_MAX_RCMTA_KEYS];
 
 	struct sk_buff *rx_amsdu;
+	struct ieee80211_low_level_stats ieee_stats;
 };
 
 /* antsel module specific state */

@@ -1126,6 +1126,18 @@ static int brcms_ops_get_antenna(struct ieee80211_hw *hw, int radio_idx,
 	return 0;
 }
 
+static int brcms_ops_get_stats(struct ieee80211_hw *hw,
+			       struct ieee80211_low_level_stats *stats)
+{
+	struct brcms_info *wl = hw->priv;
+
+	spin_lock_bh(&wl->lock);
+	brcms_c_statsupd(wl->wlc);
+	*stats = wl->wlc->ieee_stats;
+	spin_unlock_bh(&wl->lock);
+	return 0;
+}
+
 static const struct ieee80211_ops brcms_ops = {
 	.add_chanctx = ieee80211_emulate_add_chanctx,
 	.remove_chanctx = ieee80211_emulate_remove_chanctx,
@@ -1154,6 +1166,7 @@ static const struct ieee80211_ops brcms_ops = {
 	.get_survey = brcms_ops_get_survey,
 	.set_antenna = brcms_ops_set_antenna,
 	.get_antenna = brcms_ops_get_antenna,
+	.get_stats = brcms_ops_get_stats,
 };
 
 void brcms_dpc(struct tasklet_struct *t)

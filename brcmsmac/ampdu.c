@@ -929,6 +929,8 @@ brcms_c_ampdu_dotxstatus_complete(struct ampdu_info *ampdu, struct scb *scb,
 				     "%s: ampdu tx phy error (0x%x)\n",
 				     __func__, txs->phyerr);
 		}
+		if (!supr_status)
+			wlc->ieee_stats.dot11ACKFailureCount++;
 	}
 
 	/* loop through all pkts and retry if not acked */
