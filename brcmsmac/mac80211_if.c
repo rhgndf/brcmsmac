@@ -1207,6 +1207,11 @@ static int ieee_hw_rate_init(struct ieee80211_hw *hw)
 		hw->wiphy->bands[NL80211_BAND_2GHZ]->ht_cap.ampdu_density =
 			IEEE80211_HT_MPDU_DENSITY_4;
 
+	/* TODO: RX STBC only verified on BCM43227 (core revision 30) */
+	if (D11REV_IS(wl->pub->corerev, 30))
+		hw->wiphy->bands[NL80211_BAND_2GHZ]->ht_cap.cap |=
+			1 << IEEE80211_HT_CAP_RX_STBC_SHIFT;
+
 	/* STBC needs a second TX chain; peers then report RX STBC */
 	if (BRCMS_STBC_CAP_PHY(wlc) && wlc->stf->txstreams > 1) {
 		enum nl80211_band b;

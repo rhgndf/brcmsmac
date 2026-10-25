@@ -7294,6 +7294,8 @@ prep_mac80211_status(struct brcms_c_info *wlc, struct d11rxhdr *rxh,
 		rx_status->encoding = RX_ENC_HT;
 		if (rspec_is40mhz(rspec))
 			rx_status->bw = RATE_INFO_BW_40;
+		rx_status->enc_flags |= plcp3_stc(plcp[3]) <<
+					RX_ENC_FLAG_STBC_SHIFT;
 	} else {
 		switch (rspec2rate(rspec)) {
 		case BRCM_RATE_1M:
