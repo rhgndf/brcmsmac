@@ -347,5 +347,8 @@ int brcms_c_set_key(struct brcms_c_info *wlc, struct ieee80211_key_conf *key,
 		    const u8 *addr);
 void brcms_c_clear_key(struct brcms_c_info *wlc,
 		       struct ieee80211_key_conf *key);
+void brcms_c_update_tkip_key(struct brcms_c_info *wlc,
+			     struct ieee80211_key_conf *key, u32 iv32,
+			     const u16 *p1k);
 
 #endif				/* _BRCM_PUB_H_ */

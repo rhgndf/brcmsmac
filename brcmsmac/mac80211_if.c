@@ -966,6 +966,19 @@ static void brcms_ops_flush(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			   "ret=%d\n", jiffies_to_msecs(ret));
 }
 
+static void brcms_ops_update_tkip_key(struct ieee80211_hw *hw,
+				      struct ieee80211_vif *vif,
+				      struct ieee80211_key_conf *conf,
+				      struct ieee80211_sta *sta,
+				      u32 iv32, u16 *phase1key)
+{
+	struct brcms_info *wl = hw->priv;
+
+	spin_lock_bh(&wl->lock);
+	brcms_c_update_tkip_key(wl->wlc, conf, iv32, phase1key);
+	spin_unlock_bh(&wl->lock);
+}
+
 static int brcms_ops_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 			     struct ieee80211_vif *vif,
 			     struct ieee80211_sta *sta,
@@ -978,8 +991,12 @@ static int brcms_ops_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	if (cmd == SET_KEY) {
 		if (brcms_nohwcrypt ||
 		    (key->cipher != WLAN_CIPHER_SUITE_CCMP &&
+		     key->cipher != WLAN_CIPHER_SUITE_TKIP &&
 		     key->cipher != WLAN_CIPHER_SUITE_WEP40 &&
 		     key->cipher != WLAN_CIPHER_SUITE_WEP104))
+			return -EOPNOTSUPP;
+		/* the ucode keeps TKIP RX phase-1 keys for pairwise slots only */
+		if (key->cipher == WLAN_CIPHER_SUITE_TKIP && !pairwise)
 			return -EOPNOTSUPP;
 		/* group keys of several transmitters need more key slots */
 		if (!pairwise && vif->type != NL80211_IFTYPE_STATION &&
@@ -997,6 +1014,8 @@ static int brcms_ops_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 			key->flags |= IEEE80211_KEY_FLAG_GENERATE_IV;
 			/* protected management frames stay in software */
 			key->flags |= IEEE80211_KEY_FLAG_SW_MGMT_TX;
+			if (key->cipher == WLAN_CIPHER_SUITE_TKIP)
+				key->flags |= IEEE80211_KEY_FLAG_GENERATE_MMIC;
 		}
 	} else {
 		brcms_c_clear_key(wl->wlc, key);
@@ -1163,6 +1182,7 @@ static const struct ieee80211_ops brcms_ops = {
 	.rfkill_poll = brcms_ops_rfkill_poll,
 	.flush = brcms_ops_flush,
 	.set_key = brcms_ops_set_key,
+	.update_tkip_key = brcms_ops_update_tkip_key,
 	.get_tsf = brcms_ops_get_tsf,
 	.set_tsf = brcms_ops_set_tsf,
 	.set_tim = brcms_ops_beacon_set_tim,

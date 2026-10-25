@@ -3070,6 +3070,8 @@ static void brcms_c_key_init(struct brcms_c_info *wlc)
 int brcms_c_set_key(struct brcms_c_info *wlc, struct ieee80211_key_conf *key,
 		    const u8 *addr)
 {
+	static const __le16 ttak[7] = { [5] = cpu_to_le16(0xffff),
+					[6] = cpu_to_le16(0xffff) };
 	u8 buf[D11_MAX_KEY_SIZE] = {};
 	int idx;
 	u8 algo;
@@ -3080,6 +3082,9 @@ int brcms_c_set_key(struct brcms_c_info *wlc, struct ieee80211_key_conf *key,
 		break;
 	case WLAN_CIPHER_SUITE_WEP104:
 		algo = WSEC_ALGO_WEP128;
+		break;
+	case WLAN_CIPHER_SUITE_TKIP:
+		algo = WSEC_ALGO_TKIP;
 		break;
 	case WLAN_CIPHER_SUITE_CCMP:
 		algo = WSEC_ALGO_AES;
@@ -3104,9 +3109,19 @@ int brcms_c_set_key(struct brcms_c_info *wlc, struct ieee80211_key_conf *key,
 			return -EOPNOTSUPP;
 	}
 
+	/* the TKIP MIC keys after the temporal key stay in software */
 	memcpy(buf, key->key, min_t(size_t, key->keylen, sizeof(buf)));
 
 	brcms_c_suspend_mac_and_wait(wlc);
+	/*
+	 * The phase-1 key is not known yet. With iv32 0xffffffff the ucode
+	 * passes frames up undecrypted, and mac80211 hands over the phase-1
+	 * key through update_tkip_key once it has decrypted one (as b43 does).
+	 */
+	if (algo == WSEC_ALGO_TKIP)
+		brcms_c_copyto_shm(wlc, M_TKIP_TSC_TTAK +
+				   (idx - WSEC_MAX_DEFAULT_KEYS) * sizeof(ttak),
+				   ttak, sizeof(ttak));
 	brcms_c_write_key(wlc, idx, algo, buf, addr);
 	/* WEP also encrypts unicast frames with the default keys */
 	if (!addr)
@@ -3119,6 +3134,30 @@ int brcms_c_set_key(struct brcms_c_info *wlc, struct ieee80211_key_conf *key,
 	wlc->key_algo[idx] = algo;
 	key->hw_key_idx = idx;
 	return 0;
+}
+
+void brcms_c_update_tkip_key(struct brcms_c_info *wlc,
+			     struct ieee80211_key_conf *key, u32 iv32,
+			     const u16 *p1k)
+{
+	int idx = key->hw_key_idx;
+	__le16 ttak[7];
+	int i;
+
+	if (idx < WSEC_MAX_DEFAULT_KEYS || idx >= WSEC_MAX_RCMTA_KEYS ||
+	    wlc->keys[idx] != key || !wlc->pub->up)
+		return;
+
+	for (i = 0; i < 5; i++)
+		ttak[i] = cpu_to_le16(p1k[i]);
+	ttak[5] = cpu_to_le16(iv32);
+	ttak[6] = cpu_to_le16(iv32 >> 16);
+
+	brcms_c_suspend_mac_and_wait(wlc);
+	brcms_c_copyto_shm(wlc, M_TKIP_TSC_TTAK +
+			   (idx - WSEC_MAX_DEFAULT_KEYS) * sizeof(ttak),
+			   ttak, sizeof(ttak));
+	brcms_c_enable_mac(wlc);
 }
 
 void brcms_c_clear_key(struct brcms_c_info *wlc, struct ieee80211_key_conf *key)
@@ -6793,10 +6832,23 @@ brcms_c_d11hdrs_mac80211(struct brcms_c_info *wlc, struct ieee80211_hw *hw,
 	 * IV that mac80211 has placed after the MAC header.
 	 */
 	if (key) {
+		u8 *iv = (u8 *)h + ieee80211_hdrlen(h->frame_control);
+
 		mch |= (key->hw_key_idx << TXC_SECKEY_SHIFT) & TXC_SECKEY_MASK;
 		mch |= wlc->key_algo[key->hw_key_idx] << TXC_SECTYPE_SHIFT;
-		memcpy(txh->IV, (u8 *)h + ieee80211_hdrlen(h->frame_control),
-		       min_t(size_t, key->iv_len, sizeof(txh->IV)));
+		/* TKIP takes the phase-1 key and then the IV (as b43 does) */
+		if (key->cipher == WLAN_CIPHER_SUITE_TKIP) {
+			u16 p1k[5];
+
+			ieee80211_get_tkip_p1k_iv(key, get_unaligned_le32(iv + 4),
+						  p1k);
+			for (k = 0; k < 5; k++)
+				put_unaligned_le16(p1k[k], &txh->IV[k * 2]);
+			memcpy(&txh->IV[10], iv, 3);
+		} else {
+			memcpy(txh->IV, iv,
+			       min_t(size_t, key->iv_len, sizeof(txh->IV)));
+		}
 	}
 
 	/* MacFrameControl */
