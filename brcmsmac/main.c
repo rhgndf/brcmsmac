@@ -5485,9 +5485,7 @@ void brcms_c_set_shortslot_override(struct brcms_c_info *wlc, s8 sslot_override)
 	if (wlc->band->bandtype == BRCM_BAND_5G)
 		return;
 
-	if (wlc->pub->up && wlc->pub->associated) {
-		/* let watchdog or beacon processing update shortslot */
-	} else if (wlc->pub->up) {
+	if (wlc->pub->up) {
 		/* unassociated shortslot is off */
 		brcms_c_switch_shortslot(wlc, false);
 	} else {
