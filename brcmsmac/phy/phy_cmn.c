@@ -778,6 +778,7 @@ int wlc_phy_down(struct brcms_phy_pub *pih)
 	    && !wlapi_del_timer(pi->phycal_timer))
 		callbacks++;
 
+	pi->mphase_cal_phase_id = MPHASE_CAL_STATE_IDLE;
 	pi->nphy_iqcal_chanspec_2G = 0;
 	pi->nphy_iqcal_chanspec_5G = 0;
 
