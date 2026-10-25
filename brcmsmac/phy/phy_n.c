@@ -21499,6 +21499,10 @@ wlc_phy_chanspec_nphy_setup(struct brcms_phy *pi, u16 chanspec,
 		wlc_phy_rxfilt_setup_nphy_rev16(pi, chanspec);
 
 	wlc_phy_spurwar_nphy(pi);
+
+	/* TODO: only verified on BCM43227 (N-PHY revision 16) */
+	if (NREV_GE(pi->pubpi.phy_rev, 16))
+		wlc_phy_resetcca_nphy(pi);
 }
 
 void wlc_phy_chanspec_set_nphy(struct brcms_phy *pi, u16 chanspec)
