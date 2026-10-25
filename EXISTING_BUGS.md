@@ -83,3 +83,30 @@ Reachable on every device in AP mode with a power saving client.
 ATIM/BCMC FIFO sized for it; or set `HOST_BROADCAST_PS_BUFFERING` and
 release frames with `ieee80211_get_buffered_bc()` after each DTIM
 beacon.
+
+## A-MPDU frames reserve the medium for an ACK, not a BlockAck
+
+`brcms_c_d11hdrs_mac80211()`, `brcmsmac/main.c:6415-6441`, sets the
+Duration field of every unicast frame, and its fallback copy
+`FragDurFallback`, with `brcms_c_compute_frame_dur()` (`main.c:5696`):
+SIFS plus an ACK at the response rate. An MPDU sent in an A-MPDU is
+answered by a BlockAck (32 bytes instead of 14), so its Duration should
+be SIFS plus `brcms_c_calc_ba_time()` (`main.c:5670`), which the RTS/CTS
+duration of an A-MPDU already uses. Neither `ampdu.c` nor the microcode
+corrects it.
+
+On a BCM43227 uploading at HT20 to the RTL8812AU peer (24 Mbit/s
+response rate), a monitor on the peer saw Duration 44 us on all 36,497
+data frames from brcmsmac and 48 us on all 16,152 from wl. wl's TX
+descriptors also carry 48 (0x30) in `FragDurFallback`, against 44 (0x2c)
+from brcmsmac.
+
+Other stations' NAV ends 4 us before the BlockAck does. They still sense
+the BlockAck on the medium and wait at least DIFS after it, so this
+should not cause collisions. Reachable on every device with an A-MPDU
+session.
+
+**Fix:** for frames with `IEEE80211_TX_CTL_AMPDU`, set both durations
+to `get_sifs(wlc->band) + brcms_c_calc_ba_time(wlc, rspec[k],
+BRCMS_SHORT_PREAMBLE)`, as `brcms_c_compute_rtscts_dur()` does for the
+BlockAck.
