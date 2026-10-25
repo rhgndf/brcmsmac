@@ -1042,6 +1042,36 @@ static int brcms_ops_beacon_set_tim(struct ieee80211_hw *hw,
 	return 0;
 }
 
+static int brcms_ops_get_survey(struct ieee80211_hw *hw, int idx,
+				struct survey_info *survey)
+{
+	struct brcms_info *wl = hw->priv;
+	struct shared_phy *sh = wl->wlc->hw->phy_sh;
+	int noise = 0, n = 0;
+	uint i;
+
+	if (idx != 0)
+		return -ENOENT;
+
+	spin_lock_bh(&wl->lock);
+	for (i = 0; i < MA_WINDOW_SZ; i++) {
+		if (sh->phy_noise_window[i]) {
+			noise += sh->phy_noise_window[i];
+			n++;
+		}
+	}
+	spin_unlock_bh(&wl->lock);
+
+	survey->channel = hw->conf.chandef.chan;
+	survey->filled = SURVEY_INFO_IN_USE;
+	if (n) {
+		survey->filled |= SURVEY_INFO_NOISE_DBM;
+		survey->noise = noise / n;
+	}
+
+	return 0;
+}
+
 static const struct ieee80211_ops brcms_ops = {
 	.add_chanctx = ieee80211_emulate_add_chanctx,
 	.remove_chanctx = ieee80211_emulate_remove_chanctx,
@@ -1067,6 +1097,7 @@ static const struct ieee80211_ops brcms_ops = {
 	.get_tsf = brcms_ops_get_tsf,
 	.set_tsf = brcms_ops_set_tsf,
 	.set_tim = brcms_ops_beacon_set_tim,
+	.get_survey = brcms_ops_get_survey,
 };
 
 void brcms_dpc(struct tasklet_struct *t)
