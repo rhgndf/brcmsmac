@@ -1533,6 +1533,11 @@ struct d11rxhdr {
 #define RXS_AMSDU_MASK		1
 #define	RXS_AGGTYPE_MASK	0x6
 #define	RXS_AGGTYPE_SHIFT	1
+/* place of a received A-MSDU piece (RXS_AGGTYPE) */
+#define	RXS_AGGTYPE_MIDDLE	0
+#define	RXS_AGGTYPE_FIRST	1
+#define	RXS_AGGTYPE_LAST	2
+#define	RXS_AGGTYPE_WHOLE	3
 #define	RXS_PHYRXST_VALID	(1 << 8)
 #define RXS_RXANT_MASK		0x3
 #define RXS_RXANT_SHIFT		12

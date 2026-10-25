@@ -453,6 +453,7 @@ struct brcms_hardware {
  * pri_scb: primary Station Control Block
  * key_tbl: SHM address of the ucode's key table, 0 without hardware crypto.
  * keys: mac80211 key in each hardware key slot.
+ * rx_amsdu: received A-MSDU being joined from its pieces.
  */
 struct brcms_c_info {
 	struct brcms_pub *pub;
@@ -574,6 +575,8 @@ struct brcms_c_info {
 
 	u16 key_tbl;
 	struct ieee80211_key_conf *keys[WSEC_MAX_RCMTA_KEYS];
+
+	struct sk_buff *rx_amsdu;
 };
 
 /* antsel module specific state */

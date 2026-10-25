@@ -445,6 +445,7 @@ static void brcms_c_detach_mfree(struct brcms_c_info *wlc)
 		dev_kfree_skb_any(wlc->beacon);
 	if (wlc->probe_resp)
 		dev_kfree_skb_any(wlc->probe_resp);
+	dev_kfree_skb_any(wlc->rx_amsdu);
 
 	kfree(wlc);
 }
@@ -2885,8 +2886,10 @@ static void brcms_c_flushqueues(struct brcms_c_info *wlc)
 		}
 	}
 
-	/* free any posted rx packets */
+	/* free any posted rx packets and an unfinished A-MSDU */
 	dma_rxreclaim(wlc_hw->di[RX_FIFO]);
+	dev_kfree_skb_any(wlc->rx_amsdu);
+	wlc->rx_amsdu = NULL;
 }
 
 static u16
@@ -7735,6 +7738,71 @@ int brcms_c_get_tx_power(struct brcms_c_info *wlc)
 	return (int)(qdbm / BRCMS_TXPWR_DB_FACTOR);
 }
 
+/* PSDU length from the PLCP header of a received frame. */
+static uint brcms_c_rx_psdu_len(const u8 *plcp, u16 phyrxst0)
+{
+	switch (phyrxst0 & PRXS0_FT_MASK) {
+	case PRXS0_CCK:
+		/*
+		 * The LENGTH field is in microseconds at a rate in 100 kbit/s;
+		 * at 11 Mbit/s a bit tells that rounding up added a byte.
+		 */
+		return get_unaligned_le16(plcp + 2) * (plcp[0] / 5) / 16 -
+		       !!(plcp[1] & 0x80);
+	case PRXS0_OFDM:
+		return (get_unaligned_le32(plcp) >> 5) & 0xfff;
+	case PRXS0_PREN:
+		return get_unaligned_le16(plcp + 1);
+	}
+	return 0;
+}
+
+static struct sk_buff *brcms_c_rx_amsdu(struct brcms_c_info *wlc,
+					struct d11rxhdr *rxh,
+					struct sk_buff *p)
+{
+	struct sk_buff *amsdu = wlc->rx_amsdu;
+	uint type = (rxh->RxStatus2 & RXS_AGGTYPE_MASK) >> RXS_AGGTYPE_SHIFT;
+	uint len;
+
+	if (type == RXS_AGGTYPE_FIRST) {
+		if (amsdu) {
+			brcms_dbg_rx(wlc->hw->d11core,
+				     "wl%d: dropping A-MSDU without last piece\n",
+				     wlc->pub->unit);
+			dev_kfree_skb_any(amsdu);
+		}
+		amsdu = NULL;
+		len = 0;
+		if (p->len >= D11_PHY_HDR_LEN)
+			len = brcms_c_rx_psdu_len(p->data, rxh->PhyRxStatus_0);
+		if (len && len <= IEEE80211_MAX_MPDU_LEN_VHT_7991)
+			amsdu = dev_alloc_skb(D11_PHY_HDR_LEN + len);
+		wlc->rx_amsdu = amsdu;
+	}
+	if (!amsdu || p->len > skb_tailroom(amsdu))
+		goto drop;
+	skb_put_data(amsdu, p->data, p->len);
+	brcmu_pkt_buf_free_skb(p);
+	if (type != RXS_AGGTYPE_LAST)
+		return NULL;
+
+	wlc->rx_amsdu = NULL;
+	if (amsdu->len != D11_PHY_HDR_LEN +
+			  brcms_c_rx_psdu_len(amsdu->data, rxh->PhyRxStatus_0))
+		goto drop_amsdu;
+	return amsdu;
+
+drop:
+	brcmu_pkt_buf_free_skb(p);
+drop_amsdu:
+	brcms_dbg_rx(wlc->hw->d11core, "wl%d: dropping incomplete A-MSDU\n",
+		     wlc->pub->unit);
+	dev_kfree_skb_any(amsdu);
+	wlc->rx_amsdu = NULL;
+	return NULL;
+}
+
 /* Process received frames */
 /*
  * Return true if more frames need to be processed. false otherwise.
@@ -7743,9 +7811,9 @@ int brcms_c_get_tx_power(struct brcms_c_info *wlc)
 static void brcms_c_recv(struct brcms_c_info *wlc, struct sk_buff *p)
 {
 	struct d11rxhdr *rxh;
+	struct d11rxhdr amsdu_rxh;
 	struct ieee80211_hdr *h;
 	uint len;
-	bool is_amsdu;
 
 	/* frame starts with rxhdr */
 	rxh = (struct d11rxhdr *) (p->data);
@@ -7764,6 +7832,21 @@ static void brcms_c_recv(struct brcms_c_info *wlc, struct sk_buff *p)
 		skb_pull(p, 2);
 	}
 
+	/*
+	 * A-MSDU pieces; an A-MSDU arriving whole carries the bit only with
+	 * FCS or decryption errors. The joined frame continues with the
+	 * status of the last piece, which is freed with its rxhdr.
+	 */
+	if ((rxh->RxStatus2 & RXS_AMSDU_MASK) &&
+	    (rxh->RxStatus2 & RXS_AGGTYPE_MASK) !=
+	    (RXS_AGGTYPE_WHOLE << RXS_AGGTYPE_SHIFT)) {
+		amsdu_rxh = *rxh;
+		rxh = &amsdu_rxh;
+		p = brcms_c_rx_amsdu(wlc, rxh, p);
+		if (!p)
+			return;
+	}
+
 	h = (struct ieee80211_hdr *)(p->data + D11_PHY_HDR_LEN);
 	len = p->len;
 
@@ -7778,11 +7861,6 @@ static void brcms_c_recv(struct brcms_c_info *wlc, struct sk_buff *p)
 
 	/* check received pkt has at least frame control field */
 	if (len < D11_PHY_HDR_LEN + sizeof(h->frame_control))
-		goto toss;
-
-	/* not supporting A-MSDU */
-	is_amsdu = rxh->RxStatus2 & RXS_AMSDU_MASK;
-	if (is_amsdu)
 		goto toss;
 
 	brcms_c_recvctl(wlc, rxh, p);
